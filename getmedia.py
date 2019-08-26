@@ -10,6 +10,8 @@ import requests
 import re
 import hashlib
 
+from gfycathack import get_gfycat_mp4_download_url
+
 # Function for opening file as string of bytes
 
 def file_as_bytes(file):
@@ -264,15 +266,17 @@ def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET):
               '[EROR] Could not identify Imgur image/gallery ID in this URL:', media_url)
           return
   elif ('gfycat.com' in media_url):  # Gfycat
+      gfycat_url = ""
       try:
         gfycat_name = os.path.basename(urllib.parse.urlsplit(media_url).path)
-        client = GfycatClient()
-        gfycat_info = client.query_gfy(gfycat_name)
+        gfycat_url = get_gfycat_mp4_download_url(media_url)
+        # client = GfycatClient()
+        # gfycat_info = client.query_gfy(gfycat_name)
       except BaseException as e:
         print('[EROR] Error downloading Gfycat link:', str(e))
         return
       # Download the Mp4 version
-      gfycat_url = gfycat_info['gfyItem']['mp4Url']
+      # gfycat_url = gfycat_info['gfyItem']['mp4Url']
       file_path = IMAGE_DIR + '/' + gfycat_name + '.mp4'
       print('[ OK ] Downloading Gfycat at URL ' +
             gfycat_url + ' to ' + file_path)
