@@ -14,26 +14,28 @@ import itertools
 from mastodon import Mastodon
 from getmedia import get_media
 from getmedia import get_hd_media
+import coloredlogs
+import logging
 
 
 def get_reddit_posts(subreddit_info):
     post_dict = {}
-    print('[ OK ] Getting posts from Reddit...')
+    logger.info('Getting posts from Reddit...')
     for submission in subreddit_info.hot(limit=POST_LIMIT):
         if (submission.over_18 and NSFW_POSTS_ALLOWED is False):
             # Skip over NSFW posts if they are disabled in the config file
-            print('[ OK ] Skipping', submission.id, 'because it is marked as NSFW')
+            logger.info('Skipping %s because it is marked as NSFW' % (submission.id))
             continue
         elif (submission.is_self and SELF_POSTS_ALLOWED is False):
             # Skip over NSFW posts if they are disabled in the config file
-            print('[ OK ] Skipping', submission.id, 'because it is a self post')
+            logger.info('Skipping %s because it is a self post' % (submission.id))
             continue
         elif (submission.spoiler and SPOILERS_ALLOWED is False):
             # Skip over posts marked as spoilers if they are disabled in the config file
-            print('[ OK ] Skipping', submission.id, 'because it is marked as a spoiler')
+            logger.info('Skipping %s because it is marked as a spoiler' % (submission.id))
             continue
         elif (submission.stickied):
-            print('[ OK ] Skipping', submission.id, 'because it is stickied')
+            logger.info('Skipping %s because it is stickied' % (submission.id))
             continue
         else:
             # Create dict
@@ -75,7 +77,7 @@ def get_mastodon_caption(submission):
 
 
 def setup_connection_reddit(subreddit):
-    print('[ OK ] Setting up connection with Reddit...')
+    logger.info('Setting up connection with Reddit...')
     r = praw.Reddit(
         user_agent='Tootbot',
         client_id=REDDIT_AGENT,
@@ -109,10 +111,10 @@ def make_post(post_dict):
         if not duplicate_check(post_id):  # Make sure post is not a duplicate
             # Download Twitter-compatible version of media file (static image or GIF under 3MB)
             if POST_TO_TWITTER:
-                media_file = get_media(post_dict[post].url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET)
+                media_file = get_media(post_dict[post].url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger)
             # Download Mastodon-compatible version of media file (static image or MP4 file)
             if MASTODON_INSTANCE_DOMAIN:
-                hd_media_file = get_hd_media(post_dict[post], IMGUR_CLIENT, IMGUR_CLIENT_SECRET)
+                hd_media_file = get_hd_media(post_dict[post], IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger)
             # Post on Twitter
             if POST_TO_TWITTER:
                 # Make sure the post contains media, if MEDIA_POSTS_ONLY in config is set to True
@@ -133,23 +135,23 @@ def make_post(post_dict):
                             # Clean up media file
                             try:
                                 os.remove(media_file)
-                                print('[ OK ] Deleted media file at', media_file)
+                                logger.info('Deleted media file at %s' % (media_file))
                             except BaseException as e:
-                                print('[EROR] Error while deleting media file:', str(e))
+                                logger.error('Error while deleting media file: %s' % (e))
                         else:
-                            print('[ OK ] Posting this on Twitter:',caption)
+                            logger.info('Posting this on Twitter: %s' % (caption))
                             tweet = twitter.update_status(status=caption)
                         # Log the tweet
                         log_post(post_id, 'https://twitter.com/' + twitter_username + '/status/' + tweet.id_str + '/')
                     except BaseException as e:
-                        print('[EROR] Error while posting tweet:', str(e))
+                        logger.error('Error while posting tweet: %s' % (e))
                         # Log the post anyways
-                        log_post(post_id, 'Error while posting tweet: ' + str(e))
+                        log_post(post_id, 'Error while posting tweet: %s' % (e))
                 else:
-                    print('[WARN] Twitter: Skipping', post_id, 'because non-media posts are disabled or the media file was not found')
+                    logger.warning('Twitter: Skipping %s because non-media posts are disabled or the media file was not found' % (post_id))
                     # Log the post anyways
                     log_post(post_id, 'Twitter: Skipped because non-media posts are disabled or the media file was not found')
-            
+
             # Post on Mastodon
             if MASTODON_INSTANCE_DOMAIN:
                 # Make sure the post contains media, if MEDIA_POSTS_ONLY in config is set to True
@@ -170,11 +172,11 @@ def make_post(post_dict):
                             # Clean up media file
                             try:
                                 os.remove(hd_media_file)
-                                print('[ OK ] Deleted media file at', hd_media_file)
+                                logger.info('Deleted media file at %s' % (hd_media_file))
                             except BaseException as e:
-                                print('[EROR] Error while deleting media file:', str(e))
+                                logger.error('Error while deleting media file: %s' % (e))
                         else:
-                            print('[ OK ] Posting this on Mastodon:', caption)
+                            logger.info('Posting this on Mastodon: %s' % (caption))
                             # Add NSFW warning for Reddit posts marked as NSFW
                             if (post_dict[post].over_18 == True):
                                 toot = mastodon.status_post(caption, spoiler_text='NSFW')
@@ -183,41 +185,27 @@ def make_post(post_dict):
                         # Log the toot
                         log_post(post_id, toot["url"])
                     except BaseException as e:
-                        print('[EROR] Error while posting toot:', str(e))
+                        logger.error('Error while posting toot: %s' % (e))
                         # Log the post anyways
-                        log_post(post_id,'Error while posting toot: ' + str(e))
+                        log_post(post_id,'Error while posting toot: %s' % (e))
                 else:
-                    print('[WARN] Mastodon: Skipping', post_id, 'because non-media posts are disabled or the media file was not found')
+                    logger.warning('Mastodon: Skipping %s because non-media posts are disabled or the media file was not found' % (post_id))
                     # Log the post anyways
                     log_post(post_id, 'Mastodon: Skipped because non-media posts are disabled or the media file was not found')
-            
+
             # Go to sleep
-            print('[ OK ] Sleeping for', DELAY_BETWEEN_TWEETS, 'seconds')
+            logger.info('Sleeping for %s seconds' % (DELAY_BETWEEN_TWEETS))
             time.sleep(DELAY_BETWEEN_TWEETS)
         else:
-            print('[ OK ] Skipping', post_id, 'because it was already posted')
+            logger.info('Skipping %s because it was already posted' % (post_id))
 
 
-# Check for updates
-try:
-    with urllib.request.urlopen("https://raw.githubusercontent.com/corbindavenport/tootbot/update-check/current-version.txt") as url:
-        s = url.read()
-        new_version = s.decode("utf-8").rstrip()
-        current_version = 2.6  # Current version of script
-        if (current_version < float(new_version)):
-            print('[WARN] A new version of Tootbot (' + str(new_version) + ') is available! (you have ' + str(current_version) + ')')
-            print('[WARN] Get the latest update from here: https://github.com/corbindavenport/tootbot/releases')
-        else:
-            print('[ OK ] You have the latest version of Tootbot (' + str(current_version) + ')')
-    url.close()
-except BaseException as e:
-    print('[EROR] Error while checking for updates:', str(e))
 # Make sure config file exists
 try:
     config = configparser.ConfigParser()
     config.read('config.ini')
 except BaseException as e:
-    print('[EROR] Error while reading config file:', str(e))
+    print('[ERROR] Error while reading config file: %s' % (e))
     sys.exit()
 # General settings
 CACHE_CSV = config['BotSettings']['CacheFile']
@@ -236,9 +224,13 @@ if config['BotSettings']['Hashtags']:
     HASHTAGS = [x.strip() for x in HASHTAGS.split(',')]
 else:
     HASHTAGS = ''
+LOG_LEVEL = 'INFO'
+if config['BotSettings']['LogLevel']:
+    LOG_LEVEL = config['BotSettings']['LogLevel']
 # Settings related to media attachments
 MEDIA_POSTS_ONLY = bool(distutils.util.strtobool(
     config['MediaSettings']['MediaPostsOnly']))
+IMAGE_DIR = config['MediaSettings']['MediaFolder']
 # Twitter info
 POST_TO_TWITTER = bool(distutils.util.strtobool(
     config['Twitter']['PostToTwitter']))
@@ -246,9 +238,29 @@ POST_TO_TWITTER = bool(distutils.util.strtobool(
 MASTODON_INSTANCE_DOMAIN = config['Mastodon']['InstanceDomain']
 MASTODON_SENSITIVE_MEDIA = bool(
     distutils.util.strtobool(config['Mastodon']['SensitiveMedia']))
+
+# Set-up logging
+logger = logging.getLogger(__name__)
+coloredlogs.install(level=LOG_LEVEL, fmt='%(asctime)s %(name)s[%(process)d] %(levelname)s %(message)s', datefmt='%H:%M:%S')
+
+# Check for updates
+try:
+    with urllib.request.urlopen("https://raw.githubusercontent.com/corbindavenport/tootbot/update-check/current-version.txt") as url:
+        s = url.read()
+        new_version = s.decode("utf-8").rstrip()
+        current_version = 2.6  # Current version of script
+        if (current_version < float(new_version)):
+            logger.warning('A new version of Tootbot (' + str(new_version) + ') is available! (you have ' + str(current_version) + ')')
+            logger.warning('Get the latest update from here: https://github.com/corbindavenport/tootbot/releases')
+        else:
+            logger.info('You have the latest version of Tootbot (' + str(current_version) + ')')
+    url.close()
+except BaseException as e:
+    logger.error('Error while checking for updates: %s' % (e))
+
 # Setup and verify Reddit access
 if not os.path.exists('reddit.secret'):
-    print('[WARN] API keys for Reddit not found. Please enter them below (see wiki if you need help).')
+    logger.warning('API keys for Reddit not found. Please enter them below (see wiki if you need help).')
     # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
     REDDIT_AGENT = ''.join(input("[ .. ] Enter Reddit agent: ").split())
     REDDIT_CLIENT_SECRET = ''.join(
@@ -268,8 +280,8 @@ if not os.path.exists('reddit.secret'):
             reddit_config.write(f)
         f.close()
     except BaseException as e:
-        print('[EROR] Error while logging into Reddit:', str(e))
-        print('[EROR] Tootbot cannot continue, now shutting down')
+        logger.error('Error while logging into Reddit: %s' % (e))
+        logger.error('Tootbot cannot continue, now shutting down')
         exit()
 else:
     # Read API keys from secret file
@@ -279,7 +291,7 @@ else:
     REDDIT_CLIENT_SECRET = reddit_config['Reddit']['ClientSecret']
 # Setup and verify Imgur access
 if not os.path.exists('imgur.secret'):
-    print('[WARN] API keys for Imgur not found. Please enter them below (see wiki if you need help).')
+    logger.warning('API keys for Imgur not found. Please enter them below (see wiki if you need help).')
     # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
     IMGUR_CLIENT = ''.join(input("[ .. ] Enter Imgur client ID: ").split())
     IMGUR_CLIENT_SECRET = ''.join(
@@ -298,8 +310,8 @@ if not os.path.exists('imgur.secret'):
             imgur_config.write(f)
         f.close()
     except BaseException as e:
-        print('[EROR] Error while logging into Imgur:', str(e))
-        print('[EROR] Tootbot cannot continue, now shutting down')
+        logger.error('Error while logging into Imgur: %s' % (e))
+        logger.error('Tootbot cannot continue, now shutting down')
         exit()
 else:
     # Read API keys from secret file
@@ -323,15 +335,15 @@ if POST_TO_TWITTER is True:
             auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
             twitter = tweepy.API(auth)
             twitter_username = twitter.me().screen_name
-            print('[ OK ] Sucessfully authenticated on Twitter as @' +
+            logger.info('Sucessfully authenticated on Twitter as @' +
                   twitter_username)
         except BaseException as e:
-            print('[EROR] Error while logging into Twitter:', str(e))
-            print('[EROR] Tootbot cannot continue, now shutting down')
+            logger.error('Error while logging into Twitter: %s' % (e))
+            logger.error('Tootbot cannot continue, now shutting down')
             exit()
     else:
         # If the secret file doesn't exist, it means the setup process hasn't happened yet
-        print('[WARN] API keys for Twitter not found. Please enter them below (see wiki if you need help).')
+        logger.warning('API keys for Twitter not found. Please enter them below (see wiki if you need help).')
         # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
         ACCESS_TOKEN = ''.join(
             input('[ .. ] Enter access token for Twitter account: ').split())
@@ -341,14 +353,14 @@ if POST_TO_TWITTER is True:
             input('[ .. ] Enter consumer key for Twitter account: ').split())
         CONSUMER_SECRET = ''.join(
             input('[ .. ] Enter consumer secret for Twitter account: ').split())
-        print('[ OK ] Attempting to log in to Twitter...')
+        logger.info('Attempting to log in to Twitter...')
         try:
             # Make sure authentication is working
             auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
             auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
             twitter = tweepy.API(auth)
             twitter_username = twitter.me().screen_name
-            print('[ OK ] Sucessfully authenticated on Twitter as @' +
+            logger.info('Sucessfully authenticated on Twitter as @' +
                   twitter_username)
             # It worked, so save the keys to a file
             twitter_config = configparser.ConfigParser()
@@ -362,19 +374,19 @@ if POST_TO_TWITTER is True:
                 twitter_config.write(f)
             f.close()
         except BaseException as e:
-            print('[EROR] Error while logging into Twitter:', str(e))
-            print('[EROR] Tootbot cannot continue, now shutting down')
+            logger.error('Error while logging into Twitter: %s' % (e))
+            logger.error('Tootbot cannot continue, now shutting down')
             exit()
 # Log into Mastodon if enabled in settings
 if MASTODON_INSTANCE_DOMAIN:
     if not os.path.exists('mastodon.secret'):
         # If the secret file doesn't exist, it means the setup process hasn't happened yet
-        print('[WARN] API keys for Mastodon not found. Please enter them below (see wiki if you need help).')
+        logger.warning('API keys for Mastodon not found. Please enter them below (see wiki if you need help).')
         MASTODON_USERNAME = input(
             "[ .. ] Enter email address for Mastodon account: ")
         MASTODON_PASSWORD = input(
             "[ .. ] Enter password for Mastodon account: ")
-        print('[ OK ] Generating login key for Mastodon...')
+        logger.info('Generating login key for Mastodon...')
         try:
             Mastodon.create_app(
                 'Tootbot',
@@ -393,11 +405,11 @@ if MASTODON_INSTANCE_DOMAIN:
             )
             # Make sure authentication is working
             masto_username = mastodon.account_verify_credentials()['username']
-            print('[ OK ] Sucessfully authenticated on ' + MASTODON_INSTANCE_DOMAIN + ' as @' +
+            logger.info('Sucessfully authenticated on ' + MASTODON_INSTANCE_DOMAIN + ' as @' +
                   masto_username + ', login information now stored in mastodon.secret file')
         except BaseException as e:
-            print('[EROR] Error while logging into Mastodon:', str(e))
-            print('[EROR] Tootbot cannot continue, now shutting down')
+            logger.error('Error while logging into Mastodon: %s' % (e))
+            logger.error('Tootbot cannot continue, now shutting down')
             exit()
     else:
         try:
@@ -407,11 +419,10 @@ if MASTODON_INSTANCE_DOMAIN:
             )
             # Make sure authentication is working
             username = mastodon.account_verify_credentials()['username']
-            print('[ OK ] Sucessfully authenticated on ' +
-                  MASTODON_INSTANCE_DOMAIN + ' as @' + username)
+            logger.info('Sucessfully authenticated on %s as @%s' % (MASTODON_INSTANCE_DOMAIN, username))
         except BaseException as e:
-            print('[EROR] Error while logging into Mastodon:', str(e))
-            print('[EROR] Tootbot cannot continue, now shutting down')
+            logger.error('Error while logging into Mastodon: %s' % (e))
+            logger.error('Tootbot cannot continue, now shutting down')
             exit()
 # Set the command line window title on Windows
 if (os.name == 'nt'):
@@ -441,7 +452,7 @@ while True:
             default = ['Reddit post ID', 'Date and time', 'Post link']
             wr = csv.writer(cache)
             wr.writerow(default)
-        print('[ OK ] ' + CACHE_CSV + ' file not found, created a new one')
+        logger.info('%s file not found, created a new one' % (CACHE_CSV))
         cache.close()
     # Continue with script
     try:
@@ -449,7 +460,7 @@ while True:
         post_dict = get_reddit_posts(subreddit)
         make_post(post_dict)
     except BaseException as e:
-        print('[EROR] Error in main process:', str(e))
-    print('[ OK ] Sleeping for', DELAY_BETWEEN_TWEETS, 'seconds')
+        logger.error('Error in main process: %s' % (e))
+    logger.info('Sleeping for %s seconds' % (DELAY_BETWEEN_TWEETS))
     time.sleep(DELAY_BETWEEN_TWEETS)
-    print('[ OK ] Restarting main process...')
+    logger.info('Restarting main process...')
