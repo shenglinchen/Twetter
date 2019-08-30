@@ -24,15 +24,19 @@ def get_reddit_posts(subreddit_info):
     for submission in subreddit_info.hot(limit=POST_LIMIT):
         if (submission.over_18 and NSFW_POSTS_ALLOWED is False):
             # Skip over NSFW posts if they are disabled in the config file
-            logger.info('Skipping %s because it is marked as NSFW' % (submission.id))
+            logger.info('Skipping %s because it is marked as NSFW' %
+                        (submission.id))
             continue
         elif (submission.is_self and SELF_POSTS_ALLOWED is False):
             # Skip over NSFW posts if they are disabled in the config file
-            logger.info('Skipping %s because it is a self post' % (submission.id))
+            logger.info('Skipping %s because it is a self post' %
+                        (submission.id))
             continue
         elif (submission.spoiler and SPOILERS_ALLOWED is False):
-            # Skip over posts marked as spoilers if they are disabled in the config file
-            logger.info('Skipping %s because it is marked as a spoiler' % (submission.id))
+            # Skip over posts marked as spoilers if they are disabled in
+            # the config file
+            logger.info('Skipping %s because it is marked as a spoiler' %
+                        (submission.id))
             continue
         elif (submission.stickied):
             logger.info('Skipping %s because it is stickied' % (submission.id))
@@ -50,14 +54,20 @@ def get_twitter_caption(submission):
         for x in HASHTAGS:
             # Add hashtag to string, followed by a space for the next one
             hashtag_string += '#' + x + ' '
-    # Set the Twitter max title length for 280, minus the length of the shortlink and hashtags, minus one for the space between title and shortlink
-    twitter_max_title_length = 280 - len(submission.shortlink) - len(hashtag_string) - 1
+    # Set the Twitter max title length for 280, minus the length of the
+    # shortlink and hashtags, minus one for the space between title
+    # and shortlink
+    twitter_max_title_length = 280 - len(
+        submission.shortlink) - len(hashtag_string) - 1
     # Create contents of the Twitter post
     if len(submission.title) < twitter_max_title_length:
-        twitter_caption = submission.title + ' ' + hashtag_string + submission.shortlink
+        twitter_caption = submission.title + ' ' + hashtag_string
+        twitter_caption += submission.shortlink
     else:
-        twitter_caption = submission.title[:twitter_max_title_length] + '... ' + hashtag_string + submission.shortlink
+        twitter_caption = submission.title[twitter_max_title_length] + '... '
+        twitter_caption += hashtag_string + submission.shortlink
     return twitter_caption
+
 
 def get_mastodon_caption(submission):
     # Create string of hashtags
@@ -66,22 +76,26 @@ def get_mastodon_caption(submission):
         for x in HASHTAGS:
             # Add hashtag to string, followed by a space for the next one
             hashtag_string += '#' + x + ' '
-    # Set the Mastodon max title length for 500, minus the length of the shortlink and hashtags, minus one for the space between title and shortlink
-    mastodon_max_title_length = 500 - len(submission.shortlink) - len(hashtag_string) - 1
+    # Set the Mastodon max title length for 500, minus the length of the
+    # shortlink and hashtags, minus one for the space between title
+    # and shortlink
+    mastodon_max_title_length = 500 - len(
+        submission.shortlink) - len(hashtag_string) - 1
     # Create contents of the Mastodon post
     if len(submission.title) < mastodon_max_title_length:
-        mastodon_caption = submission.title + ' ' + hashtag_string + submission.shortlink
+        mastodon_caption = submission.title + ' ' + hashtag_string
+        mastodon_caption += submission.shortlink
     else:
-        mastodon_caption = submission.title[:mastodon_max_title_length] + '... ' + hashtag_string + submission.shortlink
+        mastodon_caption = submission.title[mastodon_max_title_length]
+        mastodon_caption += '... ' + hashtag_string + submission.shortlink
     return mastodon_caption
 
 
 def setup_connection_reddit(subreddit):
     logger.info('Setting up connection with Reddit...')
-    r = praw.Reddit(
-        user_agent='Tootbot',
-        client_id=REDDIT_AGENT,
-        client_secret=REDDIT_CLIENT_SECRET)
+    r = praw.Reddit(user_agent='Tootbot',
+                    client_id=REDDIT_AGENT,
+                    client_secret=REDDIT_CLIENT_SECRET)
     return r.subreddit(subreddit)
 
 
@@ -109,77 +123,114 @@ def make_post(post_dict):
         # Grab post details from dictionary
         post_id = post_dict[post].id
         if not duplicate_check(post_id):  # Make sure post is not a duplicate
-            # Download Twitter-compatible version of media file (static image or GIF under 3MB)
+            # Download Twitter-compatible version of media file
+            # (static image or GIF under 3MB)
             if POST_TO_TWITTER:
-                media_file = get_media(post_dict[post].url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger)
-            # Download Mastodon-compatible version of media file (static image or MP4 file)
+                media_file = get_media(post_dict[post].url, IMGUR_CLIENT,
+                                       IMGUR_CLIENT_SECRET, IMAGE_DIR, logger)
+            # Download Mastodon-compatible version of media file
+            # (static image or MP4 file)
             if MASTODON_INSTANCE_DOMAIN:
-                hd_media_file = get_hd_media(post_dict[post], IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger)
+                hd_media_file = get_hd_media(post_dict[post], IMGUR_CLIENT,
+                                             IMGUR_CLIENT_SECRET, IMAGE_DIR,
+                                             logger)
             # Post on Twitter
             if POST_TO_TWITTER:
-                # Make sure the post contains media, if MEDIA_POSTS_ONLY in config is set to True
-                if (((MEDIA_POSTS_ONLY is True) and media_file) or (MEDIA_POSTS_ONLY is False)):
+                # Make sure the post contains media,
+                # if MEDIA_POSTS_ONLY in config is set to True
+                if (((MEDIA_POSTS_ONLY is True) and media_file)
+                        or (MEDIA_POSTS_ONLY is False)):
                     try:
-                        auth = tweepy.OAuthHandler(
-                            CONSUMER_KEY, CONSUMER_SECRET)
-                        auth.set_access_token(
-                            ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+                        auth = tweepy.OAuthHandler(CONSUMER_KEY,
+                                                   CONSUMER_SECRET)
+                        auth.set_access_token(ACCESS_TOKEN,
+                                              ACCESS_TOKEN_SECRET)
                         twitter = tweepy.API(auth)
                         # Generate post caption
                         caption = get_twitter_caption(post_dict[post])
                         # Post the tweet
                         if (media_file):
-                            print(
-                                '[ OK ] Posting this on Twitter with media attachment:', caption)
-                            tweet = twitter.update_with_media(filename=media_file, status=caption)
+                            logger.info(
+                                'Posting this on Twitter with media %s' %
+                                (caption))
+                            tweet = twitter.update_with_media(
+                                filename=media_file, status=caption)
                             # Clean up media file
                             try:
                                 os.remove(media_file)
-                                logger.info('Deleted media file at %s' % (media_file))
+                                logger.info('Deleted media file at %s' %
+                                            (media_file))
                             except BaseException as e:
-                                logger.error('Error while deleting media file: %s' % (e))
+                                logger.error(
+                                    'Error while deleting media file: %s' %
+                                    (e))
                         else:
-                            logger.info('Posting this on Twitter: %s' % (caption))
+                            logger.info('Posting this on Twitter: %s' %
+                                        (caption))
                             tweet = twitter.update_status(status=caption)
                         # Log the tweet
-                        log_post(post_id, 'https://twitter.com/' + twitter_username + '/status/' + tweet.id_str + '/')
+                        log_post(
+                            post_id, 'https://twitter.com/' +
+                            twitter_username + '/status/' + tweet.id_str + '/')
                     except BaseException as e:
                         logger.error('Error while posting tweet: %s' % (e))
                         # Log the post anyways
-                        log_post(post_id, 'Error while posting tweet: %s' % (e))
+                        log_post(post_id,
+                                 'Error while posting tweet: %s' % (e))
                 else:
-                    logger.warning('Twitter: Skipping %s because non-media posts are disabled or the media file was not found' % (post_id))
+                    logger.warning(
+                        'Twitter: Skipping %s because non-media posts are disabled or the media file was not found'
+                        % (post_id))
                     # Log the post anyways
-                    log_post(post_id, 'Twitter: Skipped because non-media posts are disabled or the media file was not found')
+                    log_post(
+                        post_id,
+                        'Twitter: Skipped because non-media posts are disabled or the media file was not found'
+                    )
 
             # Post on Mastodon
             if MASTODON_INSTANCE_DOMAIN:
-                # Make sure the post contains media, if MEDIA_POSTS_ONLY in config is set to True
-                if (((MEDIA_POSTS_ONLY is True) and hd_media_file) or (MEDIA_POSTS_ONLY is False)):
+                # Make sure the post contains media,
+                # if MEDIA_POSTS_ONLY in config is set to True
+                if (((MEDIA_POSTS_ONLY is True) and hd_media_file)
+                        or (MEDIA_POSTS_ONLY is False)):
                     try:
                         # Generate post caption
                         caption = get_mastodon_caption(post_dict[post])
                         # Post the toot
                         if (hd_media_file):
-                            print(
-                                '[ OK ] Posting this on Mastodon with media attachment:', caption)
-                            media = mastodon.media_post(hd_media_file, mime_type=None)
-                            # If the post is marked as NSFW on Reddit, force sensitive media warning for images
-                            if (post_dict[post].over_18 == True):
-                                toot = mastodon.status_post(caption, media_ids=[media], spoiler_text='NSFW')
+                            logger.info(
+                                'Posting this on Mastodon with media: %s' %
+                                (caption))
+                            media = mastodon.media_post(hd_media_file,
+                                                        mime_type=None)
+                            # If the post is marked as NSFW on Reddit,
+                            # force sensitive media warning for images
+                            if post_dict[post].over_18:
+                                toot = mastodon.status_post(
+                                    caption,
+                                    media_ids=[media],
+                                    spoiler_text='NSFW')
                             else:
-                                toot = mastodon.status_post(caption, media_ids=[media], sensitive=MASTODON_SENSITIVE_MEDIA)
+                                toot = mastodon.status_post(
+                                    caption,
+                                    media_ids=[media],
+                                    sensitive=MASTODON_SENSITIVE_MEDIA)
                             # Clean up media file
                             try:
                                 os.remove(hd_media_file)
-                                logger.info('Deleted media file at %s' % (hd_media_file))
+                                logger.info('Deleted media file at %s' %
+                                            (hd_media_file))
                             except BaseException as e:
-                                logger.error('Error while deleting media file: %s' % (e))
+                                logger.error(
+                                    'Error while deleting media file: %s' %
+                                    (e))
                         else:
-                            logger.info('Posting this on Mastodon: %s' % (caption))
+                            logger.info('Posting this on Mastodon: %s' %
+                                        (caption))
                             # Add NSFW warning for Reddit posts marked as NSFW
-                            if (post_dict[post].over_18 == True):
-                                toot = mastodon.status_post(caption, spoiler_text='NSFW')
+                            if post_dict[post].over_18:
+                                toot = mastodon.status_post(
+                                    caption, spoiler_text='NSFW')
                             else:
                                 toot = mastodon.status_post(caption)
                         # Log the toot
@@ -187,17 +238,23 @@ def make_post(post_dict):
                     except BaseException as e:
                         logger.error('Error while posting toot: %s' % (e))
                         # Log the post anyways
-                        log_post(post_id,'Error while posting toot: %s' % (e))
+                        log_post(post_id, 'Error while posting toot: %s' % (e))
                 else:
-                    logger.warning('Mastodon: Skipping %s because non-media posts are disabled or the media file was not found' % (post_id))
+                    logger.warning(
+                        'Mastodon: Skipping %s because non-media posts are disabled or the media file was not found'
+                        % (post_id))
                     # Log the post anyways
-                    log_post(post_id, 'Mastodon: Skipped because non-media posts are disabled or the media file was not found')
+                    log_post(
+                        post_id,
+                        'Mastodon: Skipped because non-media posts are disabled or the media file was not found'
+                    )
 
             # Go to sleep
             logger.info('Sleeping for %s seconds' % (DELAY_BETWEEN_TWEETS))
             time.sleep(DELAY_BETWEEN_TWEETS)
         else:
-            logger.info('Skipping %s because it was already posted' % (post_id))
+            logger.info('Skipping %s because it was already posted' %
+                        (post_id))
 
 
 # Make sure config file exists
@@ -212,12 +269,12 @@ CACHE_CSV = config['BotSettings']['CacheFile']
 DELAY_BETWEEN_TWEETS = int(config['BotSettings']['DelayBetweenPosts'])
 POST_LIMIT = int(config['BotSettings']['PostLimit'])
 SUBREDDIT_TO_MONITOR = config['BotSettings']['SubredditToMonitor']
-NSFW_POSTS_ALLOWED = bool(distutils.util.strtobool(
-    config['BotSettings']['NSFWPostsAllowed']))
-SPOILERS_ALLOWED = bool(distutils.util.strtobool(
-    config['BotSettings']['SpoilersAllowed']))
-SELF_POSTS_ALLOWED = bool(distutils.util.strtobool(
-    config['BotSettings']['SelfPostsAllowed']))
+NSFW_POSTS_ALLOWED = bool(
+    distutils.util.strtobool(config['BotSettings']['NSFWPostsAllowed']))
+SPOILERS_ALLOWED = bool(
+    distutils.util.strtobool(config['BotSettings']['SpoilersAllowed']))
+SELF_POSTS_ALLOWED = bool(
+    distutils.util.strtobool(config['BotSettings']['SelfPostsAllowed']))
 if config['BotSettings']['Hashtags']:
     # Parse list of hashtags
     HASHTAGS = config['BotSettings']['Hashtags']
@@ -228,12 +285,12 @@ LOG_LEVEL = 'INFO'
 if config['BotSettings']['LogLevel']:
     LOG_LEVEL = config['BotSettings']['LogLevel']
 # Settings related to media attachments
-MEDIA_POSTS_ONLY = bool(distutils.util.strtobool(
-    config['MediaSettings']['MediaPostsOnly']))
+MEDIA_POSTS_ONLY = bool(
+    distutils.util.strtobool(config['MediaSettings']['MediaPostsOnly']))
 IMAGE_DIR = config['MediaSettings']['MediaFolder']
 # Twitter info
-POST_TO_TWITTER = bool(distutils.util.strtobool(
-    config['Twitter']['PostToTwitter']))
+POST_TO_TWITTER = bool(
+    distutils.util.strtobool(config['Twitter']['PostToTwitter']))
 # Mastodon info
 MASTODON_INSTANCE_DOMAIN = config['Mastodon']['InstanceDomain']
 MASTODON_SENSITIVE_MEDIA = bool(
@@ -241,34 +298,45 @@ MASTODON_SENSITIVE_MEDIA = bool(
 
 # Set-up logging
 logger = logging.getLogger(__name__)
-coloredlogs.install(level=LOG_LEVEL, fmt='%(asctime)s %(name)s[%(process)d] %(levelname)s %(message)s', datefmt='%H:%M:%S')
+coloredlogs.install(
+    level=LOG_LEVEL,
+    fmt='%(asctime)s %(name)s[%(process)d] %(levelname)s %(message)s',
+    datefmt='%H:%M:%S')
 
 # Check for updates
 try:
-    with urllib.request.urlopen("https://raw.githubusercontent.com/corbindavenport/tootbot/update-check/current-version.txt") as url:
+    with urllib.request.urlopen(
+            "https://raw.githubusercontent.com/corbindavenport/tootbot/update-check/current-version.txt"
+    ) as url:
         s = url.read()
         new_version = s.decode("utf-8").rstrip()
         current_version = 2.6  # Current version of script
         if (current_version < float(new_version)):
-            logger.warning('A new version of Tootbot (' + str(new_version) + ') is available! (you have ' + str(current_version) + ')')
-            logger.warning('Get the latest update from here: https://github.com/corbindavenport/tootbot/releases')
+            logger.warning('A new version of Tootbot (' + str(new_version) +
+                           ') is available! (you have ' +
+                           str(current_version) + ')')
+            logger.warning(
+                'Get the latest update from here: https://github.com/corbindavenport/tootbot/releases'
+            )
         else:
-            logger.info('You have the latest version of Tootbot (' + str(current_version) + ')')
+            logger.info('You have the latest version of Tootbot (' +
+                        str(current_version) + ')')
     url.close()
 except BaseException as e:
     logger.error('Error while checking for updates: %s' % (e))
 
 # Setup and verify Reddit access
 if not os.path.exists('reddit.secret'):
-    logger.warning('API keys for Reddit not found. Please enter them below (see wiki if you need help).')
+    logger.warning('Reddit API keys not found. (See wiki if you need help).')
     # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
     REDDIT_AGENT = ''.join(input("[ .. ] Enter Reddit agent: ").split())
     REDDIT_CLIENT_SECRET = ''.join(
         input("[ .. ] Enter Reddit client secret: ").split())
     # Make sure authentication is working
     try:
-        reddit_client = praw.Reddit(
-            user_agent='Tootbot', client_id=REDDIT_AGENT, client_secret=REDDIT_CLIENT_SECRET)
+        reddit_client = praw.Reddit(user_agent='Tootbot',
+                                    client_id=REDDIT_AGENT,
+                                    client_secret=REDDIT_CLIENT_SECRET)
         test = reddit_client.subreddit('announcements')
         # It worked, so save the keys to a file
         reddit_config = configparser.ConfigParser()
@@ -291,7 +359,9 @@ else:
     REDDIT_CLIENT_SECRET = reddit_config['Reddit']['ClientSecret']
 # Setup and verify Imgur access
 if not os.path.exists('imgur.secret'):
-    logger.warning('API keys for Imgur not found. Please enter them below (see wiki if you need help).')
+    logger.warning(
+        'Imgur API keys not found. (See wiki if you need help).'
+    )
     # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
     IMGUR_CLIENT = ''.join(input("[ .. ] Enter Imgur client ID: ").split())
     IMGUR_CLIENT_SECRET = ''.join(
@@ -336,23 +406,27 @@ if POST_TO_TWITTER is True:
             twitter = tweepy.API(auth)
             twitter_username = twitter.me().screen_name
             logger.info('Sucessfully authenticated on Twitter as @' +
-                  twitter_username)
+                        twitter_username)
         except BaseException as e:
             logger.error('Error while logging into Twitter: %s' % (e))
             logger.error('Tootbot cannot continue, now shutting down')
             exit()
     else:
-        # If the secret file doesn't exist, it means the setup process hasn't happened yet
-        logger.warning('API keys for Twitter not found. Please enter them below (see wiki if you need help).')
-        # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
+        # If the secret file doesn't exist, it means the setup process
+        # hasn't happened yet
+        logger.warning('Twitter API keys not found. (See wiki for help).')
+        # Whitespaces are stripped from input:
+        # https://stackoverflow.com/a/3739939
         ACCESS_TOKEN = ''.join(
             input('[ .. ] Enter access token for Twitter account: ').split())
         ACCESS_TOKEN_SECRET = ''.join(
-            input('[ .. ] Enter access token secret for Twitter account: ').split())
+            input('[ .. ] Enter access token secret for Twitter account: ').
+            split())
         CONSUMER_KEY = ''.join(
             input('[ .. ] Enter consumer key for Twitter account: ').split())
         CONSUMER_SECRET = ''.join(
-            input('[ .. ] Enter consumer secret for Twitter account: ').split())
+            input(
+                '[ .. ] Enter consumer secret for Twitter account: ').split())
         logger.info('Attempting to log in to Twitter...')
         try:
             # Make sure authentication is working
@@ -361,7 +435,7 @@ if POST_TO_TWITTER is True:
             twitter = tweepy.API(auth)
             twitter_username = twitter.me().screen_name
             logger.info('Sucessfully authenticated on Twitter as @' +
-                  twitter_username)
+                        twitter_username)
             # It worked, so save the keys to a file
             twitter_config = configparser.ConfigParser()
             twitter_config['Twitter'] = {
@@ -380,8 +454,9 @@ if POST_TO_TWITTER is True:
 # Log into Mastodon if enabled in settings
 if MASTODON_INSTANCE_DOMAIN:
     if not os.path.exists('mastodon.secret'):
-        # If the secret file doesn't exist, it means the setup process hasn't happened yet
-        logger.warning('API keys for Mastodon not found. Please enter them below (see wiki if you need help).')
+        # If the secret file doesn't exist,
+        # it means the setup process hasn't happened yet
+        logger.warning('Masotodon API keys not found. (See wiki for help).')
         MASTODON_USERNAME = input(
             "[ .. ] Enter email address for Mastodon account: ")
         MASTODON_PASSWORD = input(
@@ -392,34 +467,32 @@ if MASTODON_INSTANCE_DOMAIN:
                 'Tootbot',
                 website='https://github.com/corbindavenport/tootbot',
                 api_base_url='https://' + MASTODON_INSTANCE_DOMAIN,
-                to_file='mastodon.secret'
-            )
-            mastodon = Mastodon(
-                client_id='mastodon.secret',
-                api_base_url='https://' + MASTODON_INSTANCE_DOMAIN
-            )
-            mastodon.log_in(
-                MASTODON_USERNAME,
-                MASTODON_PASSWORD,
-                to_file='mastodon.secret'
-            )
+                to_file='mastodon.secret')
+            mastodon = Mastodon(client_id='mastodon.secret',
+                                api_base_url='https://' +
+                                MASTODON_INSTANCE_DOMAIN)
+            mastodon.log_in(MASTODON_USERNAME,
+                            MASTODON_PASSWORD,
+                            to_file='mastodon.secret')
             # Make sure authentication is working
             masto_username = mastodon.account_verify_credentials()['username']
-            logger.info('Sucessfully authenticated on ' + MASTODON_INSTANCE_DOMAIN + ' as @' +
-                  masto_username + ', login information now stored in mastodon.secret file')
+            logger.info(
+                'Sucessfully authenticated on ' + MASTODON_INSTANCE_DOMAIN +
+                ' as @' + masto_username +
+                ', login information now stored in mastodon.secret file')
         except BaseException as e:
             logger.error('Error while logging into Mastodon: %s' % (e))
             logger.error('Tootbot cannot continue, now shutting down')
             exit()
     else:
         try:
-            mastodon = Mastodon(
-                access_token='mastodon.secret',
-                api_base_url='https://' + MASTODON_INSTANCE_DOMAIN
-            )
+            mastodon = Mastodon(access_token='mastodon.secret',
+                                api_base_url='https://' +
+                                MASTODON_INSTANCE_DOMAIN)
             # Make sure authentication is working
             username = mastodon.account_verify_credentials()['username']
-            logger.info('Sucessfully authenticated on %s as @%s' % (MASTODON_INSTANCE_DOMAIN, username))
+            logger.info('Sucessfully authenticated on %s as @%s' %
+                        (MASTODON_INSTANCE_DOMAIN, username))
         except BaseException as e:
             logger.error('Error while logging into Mastodon: %s' % (e))
             logger.error('Tootbot cannot continue, now shutting down')
@@ -432,7 +505,8 @@ if (os.name == 'nt'):
             # twitter_username = twitter.me().screen_name
             masto_username = mastodon.account_verify_credentials()['username']
             os.system('title ' + twitter_username + '@twitter.com and ' +
-                      masto_username + '@' + MASTODON_INSTANCE_DOMAIN + ' - Tootbot')
+                      masto_username + '@' + MASTODON_INSTANCE_DOMAIN +
+                      ' - Tootbot')
         elif POST_TO_TWITTER:
             # Set title with just Twitter username
             twitter_username = twitter.me().screen_name

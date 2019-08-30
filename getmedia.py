@@ -12,7 +12,6 @@ import hashlib
 import coloredlogs
 import logging
 
-
 from gfycathack import get_gfycat_mp4_download_url
 
 # Function for opening file as string of bytes
@@ -37,7 +36,8 @@ def save_file(img_url, file_path, logger):
         image_file.close()
         return file_path
     else:
-        logger.error('File failed to download. Status code: %s' % (resp.status_code))
+        logger.error('File failed to download. Status code: %s' %
+                     (resp.status_code))
         return
 
 
@@ -47,7 +47,8 @@ def save_file(img_url, file_path, logger):
 def get_media(img_url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger):
     if not os.path.exists(IMAGE_DIR):
         os.makedirs(IMAGE_DIR)
-        logger.info('Media folder not found, created new folder: %s' % (IMAGE_DIR))
+        logger.info('Media folder not found, created new folder: %s' %
+                    (IMAGE_DIR))
 
     # Download and save the linked image
     if any(s in img_url
@@ -55,18 +56,23 @@ def get_media(img_url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger):
                      'i.reddituploads.com')):  # Reddit-hosted images
         file_name = os.path.basename(urllib.parse.urlsplit(img_url).path)
         file_extension = os.path.splitext(img_url)[-1].lower()
-        # Fix for issue with i.reddituploads.com links not having a file extension in the URL
+        # Fix for issue with i.reddituploads.com links not having a
+        # file extension in the URL
         if not file_extension:
             file_extension += '.jpg'
             file_name += '.jpg'
             img_url += '.jpg'
         # Download the file
         file_path = IMAGE_DIR + '/' + file_name
-        logger.info('ownloading file at URL %s to %s, file type identified as %s' % (img_url, file_path, file_extension))
+        logger.info(
+            'ownloading file at URL %s to %s, file type identified as %s' %
+            (img_url, file_path, file_extension))
         img = save_file(img_url, file_path, logger)
         return img
     elif ('v.redd.it' in img_url):  # Reddit video
-        logger.warn('Reddit videos can not be uploaded to Twitter, due to API limitations')
+        logger.warn(
+            'Videos can not be uploaded to Twitter, due to API limitations'
+        )
         return
     elif ('imgur.com' in img_url):  # Imgur
         try:
@@ -97,9 +103,11 @@ def get_media(img_url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger):
                 imgur_url = imgur_url.replace('.mp4', '.gif')
             # Download the image
             file_path = IMAGE_DIR + '/' + id + file_extension
-            logger.info('Downloading Imgur image at URL %s to %s' % (imgur_url, file_path))
+            logger.info('Downloading Imgur image at URL %s to %s' %
+                        (imgur_url, file_path))
             imgur_file = save_file(imgur_url, file_path, logger)
-            # Imgur will sometimes return a single-frame thumbnail instead of a GIF, so we need to check for this
+            # Imgur will sometimes return a single-frame thumbnail
+            # instead of a GIF, so we need to check for this
             if (file_extension == '.gif'):
                 # Open the file using the Pillow library
                 img = Image.open(imgur_file)
@@ -111,18 +119,20 @@ def get_media(img_url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger):
                     return imgur_file
                 else:
                     # Image is not actually a GIF, so don't post it
-                    logger.warn('Imgur has not processed a GIF version of this link, so it can not be posted to Twitter')
+                    logger.warn('Imgur: not a GIF, not posted to Twitter')
                     img.close()
                     # Delete the image
                     try:
                         os.remove(imgur_file)
                     except BaseException as e:
-                        logger.error('Error while deleting media file: %s' % (e))
+                        logger.error('Error while deleting media file: %s' %
+                                     (e))
                     return
             else:
                 return imgur_file
         else:
-            logger.error('Could not identify Imgur image/gallery ID at: %s' % (img_url))
+            logger.error('Could not identify Imgur image/gallery ID at: %s' %
+                         (img_url))
             return
     elif ('gfycat.com' in img_url):  # Gfycat
         try:
@@ -132,10 +142,11 @@ def get_media(img_url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger):
         except BaseException as e:
             logger.error('Error downloading Gfycat link: %s' % (e))
             return
-        # Download the 2MB version because Tweepy has a 3MB upload limit for GIFs
+        # Download the 2MB version because Tweepy has 3MB upload limit for GIFs
         gfycat_url = gfycat_info['gfyItem']['max2mbGif']
         file_path = IMAGE_DIR + '/' + gfycat_name + '.gif'
-        logger.info('Downloading Gfycat at URL %s to %s' % (gfycat_url, file_path))
+        logger.info('Downloading Gfycat at URL %s to %s' %
+                    (gfycat_url, file_path))
         gfycat_file = save_file(gfycat_url, file_path, logger)
         return gfycat_file
     elif ('giphy.com' in img_url):  # Giphy
@@ -145,17 +156,21 @@ def get_media(img_url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger):
         if m:
             # Get the Giphy ID
             id = m.group(3)
-            # Download the 2MB version because Tweepy has a 3MB upload limit for GIFs
-            giphy_url = 'https://media.giphy.com/media/' + id + '/giphy-downsized.gif'
+            # Download the 2MB version because Tweepy has a 3MB
+            # upload limit for GIFs
+            giphy_url = 'https://media.giphy.com/media/'
+            giphy_url += id + '/giphy-downsized.gif'
             file_path = IMAGE_DIR + '/' + id + '-downsized.gif'
-            logger.info('Downloading Giphy at %s to %s' % (giphy_url, file_path))
+            logger.info('Downloading Giphy at %s to %s' %
+                        (giphy_url, file_path))
             giphy_file = save_file(giphy_url, file_path, logger)
-            # Check the hash to make sure it's not a GIF saying "This content is not available"
+            # Check the hash to make sure it's not a GIF saying
+            # "This content is not available"
             # More info: https://github.com/corbindavenport/tootbot/issues/8
             hash = hashlib.md5(file_as_bytes(open(giphy_file,
                                                   'rb'))).hexdigest()
             if (hash == '59a41d58693283c72d9da8ae0561e4e5'):
-                logger.warn('Giphy has not processed a 2MB GIF version of this link, so it can not be posted to Twitter')
+                logger.warn('Giphy: no 2MB GIF version, not posted to Twitter')
                 return
             else:
                 return giphy_file
@@ -187,11 +202,11 @@ def get_media(img_url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger):
             return
 
 
-# Function for obtaining static images/GIFs, or MP4 videos if they exist, from popular image hosts
-# This is currently only used for Mastodon posts, because the Tweepy API doesn't support video uploads
-
-
-def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger):
+# Function for obtaining static images/GIFs, or MP4 videos if they exist,
+# from popular image hosts. This is currently only used for Mastodon posts,
+# because the Tweepy API doesn't support video uploads
+def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR,
+                 logger):
     media_url = submission.url
     if not os.path.exists(IMAGE_DIR):
         os.makedirs(IMAGE_DIR)
@@ -202,14 +217,17 @@ def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logge
                      'i.reddituploads.com')):  # Reddit-hosted images
         file_name = os.path.basename(urllib.parse.urlsplit(media_url).path)
         file_extension = os.path.splitext(media_url)[-1].lower()
-        # Fix for issue with i.reddituploads.com links not having a file extension in the URL
+        # Fix for issue with i.reddituploads.com links not having a
+        # file extension in the URL
         if not file_extension:
             file_extension += '.jpg'
             file_name += '.jpg'
             media_url += '.jpg'
         # Download the file
         file_path = IMAGE_DIR + '/' + file_name
-        logger.info('Downloading file at URL %s to %s, file type identified as %s' % (media_url, file_path, file_extension))
+        logger.info(
+            'Downloading file at URL %s to %s, file type identified as %s' %
+            (media_url, file_path, file_extension))
         img = save_file(media_url, file_path, logger)
         return img
     elif ('v.redd.it' in media_url):  # Reddit video
@@ -218,11 +236,13 @@ def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logge
             video_url = submission.media['reddit_video']['fallback_url']
             # Download the file
             file_path = IMAGE_DIR + '/' + submission.id + '.mp4'
-            logger.info('Downloading Reddit video at URL %s to %s' % (video_url, file_path))
+            logger.info('Downloading Reddit video at URL %s to %s' %
+                        (video_url, file_path))
             video = save_file(video_url, file_path, logger)
             return video
         else:
-            logger.error('Reddit API returned no media for this URL: %s' % (media_url))
+            logger.error('Reddit API returned no media for this URL: %s' %
+                         (media_url))
             return
     elif ('imgur.com' in media_url):  # Imgur
         try:
@@ -250,11 +270,13 @@ def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logge
             file_extension = os.path.splitext(imgur_url)[-1].lower()
             # Download the image
             file_path = IMAGE_DIR + '/' + id + file_extension
-            logger.info(' Downloading Imgur image at URL %s to %s' % (imgur_url, file_path))
+            logger.info(' Downloading Imgur image at URL %s to %s' %
+                        (imgur_url, file_path))
             imgur_file = save_file(imgur_url, file_path, logger)
             return imgur_file
         else:
-            logger.error('Could not identify Imgur image/gallery ID at: %s' % (media_url))
+            logger.error('Could not identify Imgur image/gallery ID at: %s' %
+                         (media_url))
             return
     elif ('gfycat.com' in media_url):  # Gfycat
         gfycat_url = ""
@@ -270,7 +292,8 @@ def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logge
         # Download the Mp4 version
         # gfycat_url = gfycat_info['gfyItem']['mp4Url']
         file_path = IMAGE_DIR + '/' + gfycat_name + '.mp4'
-        logger.info('Downloading Gfycat at URL %s to %s' % (gfycat_url, file_path))
+        logger.info('Downloading Gfycat at URL %s to %s' %
+                    (gfycat_url, file_path))
         gfycat_file = save_file(gfycat_url, file_path, logger)
         return gfycat_file
     elif ('giphy.com' in media_url):  # Giphy
@@ -283,18 +306,20 @@ def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logge
             # Download the MP4 version of the GIF
             giphy_url = 'https://media.giphy.com/media/' + id + '/giphy.mp4'
             file_path = IMAGE_DIR + '/' + id + 'giphy.mp4'
-            logger.info('Downloading Giphy at URL %s to %s' % (giphy_url, file_path))
+            logger.info('Downloading Giphy at URL %s to %s' %
+                        (giphy_url, file_path))
             giphy_file = save_file(giphy_url, file_path, logger)
             return giphy_file
         else:
-            logger.error('Could not identify Giphy ID in this URL: %s' % (media_url))
+            logger.error('Could not identify Giphy ID in this URL: %s' %
+                         (media_url))
             return
     else:
         # Check if URL is an image or MP4 file, based on the MIME type
         image_formats = ('image/png', 'image/jpeg', 'image/gif', 'image/webp',
                          'video/mp4')
         try:
-            img_site = urlopen(img_url)
+            img_site = urlopen(media_url)
         except BaseException as e:
             logger.error('Error whole opening URL %s' % (e))
             return
@@ -303,7 +328,8 @@ def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logge
             # URL appears to be an image, so download it
             file_name = os.path.basename(urllib.parse.urlsplit(media_url).path)
             file_path = IMAGE_DIR + '/' + file_name
-            logger.info('Downloading file at URL %s to %s' % (media_url, file_path))
+            logger.info('Downloading file at URL %s to %s' %
+                        (media_url, file_path))
             try:
                 img = save_file(media_url, file_path, logger)
                 return img
