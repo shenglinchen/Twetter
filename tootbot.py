@@ -110,11 +110,11 @@ def duplicate_check(id):
     return value
 
 
-def log_post(id, post_url):
+def log_post(id, post_url, shared_url):
     with open(CACHE_CSV, 'a', newline='') as cache:
         date = time.strftime("%d/%m/%Y") + ' ' + time.strftime("%H:%M:%S")
         wr = csv.writer(cache, delimiter=',')
-        wr.writerow([id, date, post_url])
+        wr.writerow([id, date, post_url, shared_url])
     cache.close()
 
 
@@ -122,11 +122,12 @@ def make_post(post_dict):
     for post in post_dict:
         # Grab post details from dictionary
         post_id = post_dict[post].id
-        if not duplicate_check(post_id):  # Make sure post is not a duplicate
+        shared_url = post_dict[post].url
+        if not duplicate_check(post_id) and not duplicate_check(shared_url):
             # Download Twitter-compatible version of media file
             # (static image or GIF under 3MB)
             if POST_TO_TWITTER:
-                media_file = get_media(post_dict[post].url, IMGUR_CLIENT,
+                media_file = get_media(shared_url, IMGUR_CLIENT,
                                        IMGUR_CLIENT_SECRET, IMAGE_DIR, logger)
             # Download Mastodon-compatible version of media file
             # (static image or MP4 file)
@@ -138,8 +139,8 @@ def make_post(post_dict):
             if POST_TO_TWITTER:
                 # Make sure the post contains media,
                 # if MEDIA_POSTS_ONLY in config is set to True
-                if (((MEDIA_POSTS_ONLY is True) and media_file)
-                        or (MEDIA_POSTS_ONLY is False)):
+                if (((MEDIA_POSTS_ONLY is True) and media_file) or
+                        (MEDIA_POSTS_ONLY is False)):
                     try:
                         auth = tweepy.OAuthHandler(CONSUMER_KEY,
                                                    CONSUMER_SECRET)
@@ -171,12 +172,13 @@ def make_post(post_dict):
                         # Log the tweet
                         log_post(
                             post_id, 'https://twitter.com/' +
-                            twitter_username + '/status/' + tweet.id_str + '/')
+                            twitter_username + '/status/' + tweet.id_str + '/',
+                            shared_url)
                     except BaseException as e:
                         logger.error('Error while posting tweet: %s' % (e))
                         # Log the post anyways
                         log_post(post_id,
-                                 'Error while posting tweet: %s' % (e))
+                                 'Error while posting tweet: %s' % (e), '')
                 else:
                     logger.warning(
                         'Twitter: Skipping %s because non-media posts are disabled or the media file was not found'
@@ -184,7 +186,8 @@ def make_post(post_dict):
                     # Log the post anyways
                     log_post(
                         post_id,
-                        'Twitter: Skipped because non-media posts are disabled or the media file was not found'
+                        'Twitter: Skipped because non-media posts are disabled or the media file was not found',
+                        ''
                     )
 
             # Post on Mastodon
@@ -234,11 +237,11 @@ def make_post(post_dict):
                             else:
                                 toot = mastodon.status_post(caption)
                         # Log the toot
-                        log_post(post_id, toot["url"])
+                        log_post(post_id, toot["url"], shared_url)
                     except BaseException as e:
                         logger.error('Error while posting toot: %s' % (e))
                         # Log the post anyways
-                        log_post(post_id, 'Error while posting toot: %s' % (e))
+                        log_post(post_id, 'Error while posting toot: %s' % (e), '')
                 else:
                     logger.warning(
                         'Mastodon: Skipping %s because non-media posts are disabled or the media file was not found'
@@ -246,7 +249,8 @@ def make_post(post_dict):
                     # Log the post anyways
                     log_post(
                         post_id,
-                        'Mastodon: Skipped because non-media posts are disabled or the media file was not found'
+                        'Mastodon: Skipped because non-media posts are disabled or the media file was not found',
+                        ''
                     )
 
             # Go to sleep
