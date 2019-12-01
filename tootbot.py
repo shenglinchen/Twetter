@@ -272,7 +272,7 @@ except BaseException as e:
 CACHE_CSV = config['BotSettings']['CacheFile']
 DELAY_BETWEEN_TWEETS = int(config['BotSettings']['DelayBetweenPosts'])
 RUN_ONCE_ONLY = bool(
-    distutils.util.strtobool(confg['BotSettings']['RunOnceOnly']))
+    distutils.util.strtobool(config['BotSettings']['RunOnceOnly']))
 POST_LIMIT = int(config['BotSettings']['PostLimit'])
 SUBREDDIT_TO_MONITOR = config['BotSettings']['SubredditToMonitor']
 NSFW_POSTS_ALLOWED = bool(
