@@ -271,6 +271,8 @@ except BaseException as e:
 # General settings
 CACHE_CSV = config['BotSettings']['CacheFile']
 DELAY_BETWEEN_TWEETS = int(config['BotSettings']['DelayBetweenPosts'])
+RUN_ONCE_ONLY = bool(
+    distutils.util.strtobool(confg['BotSettings']['RunOnceOnly']))
 POST_LIMIT = int(config['BotSettings']['PostLimit'])
 SUBREDDIT_TO_MONITOR = config['BotSettings']['SubredditToMonitor']
 NSFW_POSTS_ALLOWED = bool(
@@ -522,6 +524,7 @@ if (os.name == 'nt'):
                       MASTODON_INSTANCE_DOMAIN + ' - Tootbot')
     except:
         os.system('title Tootbot')
+
 # Run the main script
 while True:
     # Make sure logging file and media directory exists
@@ -539,6 +542,11 @@ while True:
         make_post(post_dict)
     except BaseException as e:
         logger.error('Error in main process: %s' % (e))
+
+    if RUN_ONCE_ONLY:
+        logger.info('Exiting because RunOnceOnly is set to %s', (RUN_ONCE_ONLY))
+        sys.exit()
+
     logger.info('Sleeping for %s seconds' % (DELAY_BETWEEN_TWEETS))
     time.sleep(DELAY_BETWEEN_TWEETS)
     logger.info('Restarting main process...')
