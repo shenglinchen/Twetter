@@ -218,15 +218,7 @@ def make_post(post_dict):
                                     caption,
                                     media_ids=[media],
                                     sensitive=MASTODON_SENSITIVE_MEDIA)
-                            # Clean up media file
-                            try:
-                                os.remove(hd_media_file)
-                                logger.info('Deleted media file at %s' %
-                                            (hd_media_file))
-                            except BaseException as e:
-                                logger.error(
-                                    'Error while deleting media file: %s' %
-                                    (e))
+                           
                         else:
                             logger.info('Posting this on Mastodon: %s' %
                                         (caption))
@@ -242,6 +234,16 @@ def make_post(post_dict):
                         logger.error('Error while posting toot: %s' % (e))
                         # Log the post anyways
                         log_post(post_id, 'Error while posting toot: %s' % (e), '')
+                        
+                    # Clean up media file
+                    try:
+                        if (hd_media_file):
+                            os.remove(hd_media_file)
+                            logger.info('Deleted media file at %s' % (hd_media_file))
+                    except BaseException as e:
+                        logger.error(
+                            'Error while deleting media file: %s' %
+                            (e))
                 else:
                     logger.warning(
                         'Mastodon: Skipping %s because non-media posts are disabled or the media file was not found'
