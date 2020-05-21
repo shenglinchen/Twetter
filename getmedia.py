@@ -283,7 +283,7 @@ def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR,
         try:
             gfycat_name = os.path.basename(
                 urllib.parse.urlsplit(media_url).path)
-            gfycat_url = get_gfycat_mp4_download_url(media_url)
+            gfycat_url = get_gfycat_mp4_download_url(media_url, logger)
             # client = GfycatClient()
             # gfycat_info = client.query_gfy(gfycat_name)
         except BaseException as e:

@@ -124,6 +124,7 @@ def make_post(post_dict):
         post_id = post_dict[post].id
         shared_url = post_dict[post].url
         if not duplicate_check(post_id) and not duplicate_check(shared_url):
+            logger.debug('Processing reddit post: %s' % (post_dict[post]))
             # Download Twitter-compatible version of media file
             # (static image or GIF under 3MB)
             if POST_TO_TWITTER:
@@ -241,9 +242,7 @@ def make_post(post_dict):
                             os.remove(hd_media_file)
                             logger.info('Deleted media file at %s' % (hd_media_file))
                     except BaseException as e:
-                        logger.error(
-                            'Error while deleting media file: %s' %
-                            (e))
+                        logger.error('Error while deleting media file: %s' % (e))
                 else:
                     logger.warning(
                         'Mastodon: Skipping %s because non-media posts are disabled or the media file was not found'
