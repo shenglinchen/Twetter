@@ -10,6 +10,7 @@ def get_gfycat_mp4_download_url(media_url, logger):
     """Actual hack method."""
     response = requests.get(media_url)
     logger.debug('Response code %s for: %s' % (response.status_code, media_url))
+    response.raise_for_status()
     soup = BeautifulSoup(response.text, 'lxml')
     mp4_url = ""
     for tag in soup.find_all("source", src=True):
