@@ -289,8 +289,9 @@ def get_hd_media(submission, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR,
         except BaseException as e:
             logger.error('Error downloading Gfycat link: %s' % (e))
             return
-        # Download the Mp4 version
-        # gfycat_url = gfycat_info['gfyItem']['mp4Url']
+        if gfycat_url == '':
+            logger.debug('Empty Gfycat URL for %s; no attachement to download' % submission.id)
+            return
         file_path = IMAGE_DIR + '/' + gfycat_name + '.mp4'
         logger.info('Downloading Gfycat at URL %s to %s' %
                     (gfycat_url, file_path))

@@ -209,7 +209,7 @@ def make_post(post_dict):
                                                         mime_type=None)
                             # If the post is marked as NSFW on Reddit,
                             # force sensitive media warning for images
-                            if post_dict[post].over_18:
+                            if post_dict[post].over_18 and NSFW_POSTS_MARKED:
                                 toot = mastodon.status_post(
                                     caption,
                                     media_ids=[media],
@@ -278,6 +278,8 @@ POST_LIMIT = int(config['BotSettings']['PostLimit'])
 SUBREDDIT_TO_MONITOR = config['BotSettings']['SubredditToMonitor']
 NSFW_POSTS_ALLOWED = bool(
     distutils.util.strtobool(config['BotSettings']['NSFWPostsAllowed']))
+NSFW_POSTS_MARKED = bool(
+    distutils.util.strtobool(config['BotSettings']['NSFWPostsMarked']))
 SPOILERS_ALLOWED = bool(
     distutils.util.strtobool(config['BotSettings']['SpoilersAllowed']))
 SELF_POSTS_ALLOWED = bool(
