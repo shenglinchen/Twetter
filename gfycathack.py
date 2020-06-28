@@ -1,9 +1,7 @@
 """Quick hack to determine HD mp4 download link for a gfycat video."""
 
-from bs4 import BeautifulSoup
 import requests
-import coloredlogs
-import logging
+from bs4 import BeautifulSoup
 
 
 def get_gfycat_mp4_download_url(media_url, logger):
