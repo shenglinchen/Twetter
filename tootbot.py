@@ -13,7 +13,7 @@ import tweepy
 from imgurpython import ImgurClient
 from mastodon import Mastodon
 
-from getmedia import get_hd_media
+from getmedia import MediaAttachment
 from getmedia import get_media
 
 MAX_LEN_TWEET = 280
@@ -92,11 +92,11 @@ def duplicate_check(identifier):
     return value
 
 
-def log_post(reddit_id, post_url, shared_url):
+def log_post(reddit_id, post_url, shared_url, check_sum):
     with open(CACHE_CSV, 'a', newline='') as cache_file:
         date = time.strftime("%d/%m/%Y") + ' ' + time.strftime("%H:%M:%S")
         cache_csv_writer = csv.writer(cache_file, delimiter=',')
-        cache_csv_writer.writerow([reddit_id, date, post_url, shared_url])
+        cache_csv_writer.writerow([reddit_id, date, post_url, shared_url, check_sum])
     cache_file.close()
 
 
@@ -106,7 +106,7 @@ def make_post(source_posts):
         # Grab post details from dictionary
         post_id = source_posts[post].id
         shared_url = source_posts[post].url
-        if not duplicate_check(post_id) and not duplicate_check(shared_url):
+        if not (duplicate_check(post_id) or duplicate_check(shared_url)):
             logger.debug('Processing reddit post: %s' % (source_posts[post]))
             # Post on Twitter
             if POST_TO_TWITTER:
@@ -143,19 +143,21 @@ def make_post(source_posts):
                         log_post(
                             post_id, 'https://twitter.com/' +
                                      twitter_username + '/status/' + tweet.id_str + '/',
-                            shared_url)
+                            shared_url,
+                            '')
                     except BaseException as e:
                         logger.error('Error while posting tweet: %s' % e)
                         # Log the post anyways
-                        log_post(post_id, 'Error while posting tweet: %s' % e, '')
+                        log_post(post_id, 'Error while posting tweet: %s' % e, '', '')
                 else:
                     logger.warning(
                         'Twitter: Skipping %s because non-media posts are disabled or the media file was not found'
-                        % (post_id))
+                        % post_id)
                     # Log the post anyways
                     log_post(
                         post_id,
                         'Twitter: Skipped because non-media posts are disabled or the media file was not found',
+                        '',
                         ''
                     )
 
@@ -163,19 +165,35 @@ def make_post(source_posts):
             if MASTODON_INSTANCE_DOMAIN:
                 # Download Mastodon-compatible version of media file
                 # (static image or MP4 file)
-                hd_media_file = get_hd_media(source_posts[post], IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR, logger)
+                attachment = MediaAttachment(source_posts[post],
+                                             IMGUR_CLIENT,
+                                             IMGUR_CLIENT_SECRET,
+                                             IMAGE_DIR,
+                                             MediaAttachment.HIGH_RES,
+                                             logger
+                                             )
+                # Duplicate check with hash
+                if duplicate_check(attachment.check_sum_high_res):
+                    logger.info('Skipping %s because image was already posted' % post_id)
+                    log_post(post_id,
+                             'Skipping post as image has already been posted',
+                             shared_url,
+                             attachment.check_sum_high_res)
+                    return
+
                 # Make sure the post contains media,
                 # if MEDIA_POSTS_ONLY in config is set to True
-                if (((MEDIA_POSTS_ONLY is True) and hd_media_file)
+                if (((MEDIA_POSTS_ONLY is True) and attachment.media_path_high_res)
                         or (MEDIA_POSTS_ONLY is False)):
                     try:
                         NUM_NON_PROMO_MESSAGES += 1
                         # Generate post caption
                         caption = get_caption(source_posts[post], MAX_LEN_TOOT)
                         # Post the toot
-                        if hd_media_file:
+                        if attachment.media_path_high_res:
                             logger.info('Posting this on Mastodon with media: %s' % caption)
-                            media = mastodon.media_post(hd_media_file, mime_type=None)
+                            logger.info('High Res Media checksum: %s' % attachment.check_sum_high_res)
+                            media = mastodon.media_post(attachment.media_path_high_res, mime_type=None)
                             # If the post is marked as NSFW on Reddit,
                             # force sensitive media warning for images
                             if source_posts[post].over_18 and NSFW_POSTS_MARKED:
@@ -194,19 +212,14 @@ def make_post(source_posts):
                             else:
                                 toot = mastodon.status_post(caption)
                         # Log the toot
-                        log_post(post_id, toot["url"], shared_url)
+                        log_post(post_id, toot["url"], shared_url, attachment.check_sum_high_res)
                     except BaseException as e:
                         logger.error('Error while posting toot: %s' % e)
                         # Log the post anyways
-                        log_post(post_id, 'Error while posting toot: %s' % e, '')
+                        log_post(post_id, 'Error while posting toot: %s' % e, '', '')
 
                     # Clean up media file
-                    try:
-                        if hd_media_file:
-                            os.remove(hd_media_file)
-                            logger.info('Deleted media file at %s' % hd_media_file)
-                    except BaseException as e:
-                        logger.error('Error while deleting media file: %s' % e)
+                    attachment.destroy(logger)
                 else:
                     logger.warning(
                         'Mastodon: Skipping %s because non-media posts are disabled or the media file was not found'
@@ -215,6 +228,7 @@ def make_post(source_posts):
                     log_post(
                         post_id,
                         'Mastodon: Skipped because non-media posts are disabled or the media file was not found',
+                        '',
                         ''
                     )
 
@@ -285,7 +299,7 @@ try:
     ) as url:
         s = url.read()
         new_version = s.decode("utf-8").rstrip()
-        current_version = 2.6  # Current version of script
+        current_version = 2.7  # Current version of script
         if current_version < float(new_version):
             logger.warning('A new version of Tootbot (' + str(new_version) +
                            ') is available! (you have ' +
@@ -386,7 +400,7 @@ if POST_TO_TWITTER is True:
         # Whitespaces are stripped from input:
         # https://stackoverflow.com/a/3739939
         ACCESS_TOKEN = ''.join(input('[ .. ] Enter access token for Twitter account: ').split())
-        ACCESS_TOKEN_SECRET = ''.join(input('[ .. ] Enter access token secret for Twitter account: '). split())
+        ACCESS_TOKEN_SECRET = ''.join(input('[ .. ] Enter access token secret for Twitter account: ').split())
         CONSUMER_KEY = ''.join(input('[ .. ] Enter consumer key for Twitter account: ').split())
         CONSUMER_SECRET = ''.join(input('[ .. ] Enter consumer secret for Twitter account: ').split())
         logger.info('Attempting to log in to Twitter...')
@@ -453,7 +467,7 @@ if MASTODON_INSTANCE_DOMAIN:
                                              MASTODON_INSTANCE_DOMAIN)
             # Make sure authentication is working
             username = mastodon.account_verify_credentials()['username']
-            logger.info('Sucessfully authenticated on %s as @%s' % (MASTODON_INSTANCE_DOMAIN, username))
+            logger.info('Successfully authenticated on %s as @%s' % (MASTODON_INSTANCE_DOMAIN, username))
         except BaseException as e:
             logger.error('Error while logging into Mastodon: %s' % e)
             logger.error('Tootbot cannot continue, now shutting down')
