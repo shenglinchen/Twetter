@@ -15,6 +15,7 @@ This is a Python bot that looks up posts from specified subreddits and automatic
 * NSFW content, spoilers, and self-posts can be filtered
 * Tootbot can monitor multiple subreddits at once
 * Tootbot is fully open-source, so you don't have to give an external service full access to your social media accounts
+* Tootbot also checks the sha256 checksum of media files to stop posting of the same media file from different subreddits.
 
 Tootbot uses the [tweepy](https://github.com/tweepy/tweepy), [PRAW](https://praw.readthedocs.io/en/latest/), [py-gfycat](https://github.com/ankeshanand/py-gfycat), [imgurpython](https://github.com/Imgur/imgurpython), [Pillow](https://github.com/python-pillow/Pillow), and [Mastodon.py](https://github.com/halcy/Mastodon.py) libraries. The Heroku version also uses the [redis-py](https://github.com/andymccurdy/redis-py) library.
 

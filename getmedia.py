@@ -13,6 +13,81 @@ from imgurpython import ImgurClient
 from gfycathack import get_gfycat_mp4_download_url
 
 
+# Implementing class for media attachment
+class MediaAttachment:
+    LOW_RES = 1
+    HIGH_RES = 2
+    HIGH_AND_LOW_RES = 3
+
+    def __init__(self, media_url, imgur_client, imgur_client_secret, image_dir, download_for, logger):
+
+        self.__media_path_low_res = None
+        self.__media_path_high_res = None
+        self.__media_url = media_url
+
+        if download_for in [self.LOW_RES, self.HIGH_AND_LOW_RES]:
+            self.__media_path_low_res = get_media(self.__media_url,
+                                                  imgur_client,
+                                                  imgur_client_secret,
+                                                  image_dir,
+                                                  logger)
+        if download_for in [self.HIGH_RES, self.HIGH_AND_LOW_RES]:
+            self.__media_path_high_res = get_hd_media(self.__media_url,
+                                                      imgur_client,
+                                                      imgur_client_secret,
+                                                      image_dir,
+                                                      logger)
+
+        sha256 = hashlib.sha256()
+        if self.__media_path_low_res is not None:
+            with open(self.__media_path_low_res, "rb") as f:
+                # Read and update hash string value in blocks of 4K
+                for byte_block in iter(lambda: f.read(4096), b""):
+                    sha256.update(byte_block)
+        self.__check_sum_low_res = sha256.hexdigest()
+
+        sha256 = hashlib.sha256()
+        if self.__media_path_high_res is not None:
+            with open(self.__media_path_high_res, "rb") as f:
+                # Read and update hash string value in blocks of 4K
+                for byte_block in iter(lambda: f.read(4096), b""):
+                    sha256.update(byte_block)
+        self.__check_sum_high_res = sha256.hexdigest()
+
+    def destroy(self, logger):
+
+        try:
+            if self.__media_path_high_res is not None:
+                os.remove(self.__media_path_high_res)
+                logger.info('Deleted media file at %s' % self.__media_path_high_res)
+            if self.__media_path_low_res is not None:
+                os.remove(self.__media_path_low_res)
+                logger.info('Deleted media file at %s' % self.__media_path_low_res)
+        except BaseException as e:
+            logger.error('Error while deleting media file: %s' % e)
+
+        self.__media_path_high_res = None
+        self.__media_path_low_res = None
+        self.__media_url = None
+        self.__check_sum_high_res = None
+
+    @property
+    def check_sum_high_res(self):
+        return self.__check_sum_high_res
+
+    @property
+    def check_sum_low_res(self):
+        return self.__check_sum_low_res
+
+    @property
+    def media_path_high_res(self):
+        return self.__media_path_high_res
+
+    @property
+    def media_path_low_res(self):
+        return self.__media_path_low_res
+
+
 # Function for opening file as string of bytes
 def file_as_bytes(file):
     with file:
@@ -52,7 +127,7 @@ def get_media(img_url, imgur_client, imgur_client_secret, image_dir, logger):
             file_name += '.jpg'
             img_url += '.jpg'
         # Download the file
-        file_path = image_dir + '/' + file_name
+        file_path = image_dir + '/lr_' + file_name
         logger.info(
             'downloading file at URL %s to %s, file type identified as %s' %
             (img_url, file_path, file_extension))
@@ -89,7 +164,7 @@ def get_media(img_url, imgur_client, imgur_client_secret, image_dir, logger):
                 file_extension = file_extension.replace('.mp4', '.gif')
                 imgur_url = imgur_url.replace('.mp4', '.gif')
             # Download the image
-            file_path = image_dir + '/' + imgur_id + file_extension
+            file_path = image_dir + '/lr_' + imgur_id + file_extension
             logger.info('Downloading Imgur image at URL %s to %s' %
                         (imgur_url, file_path))
             imgur_file = save_file(imgur_url, file_path, logger)
@@ -129,11 +204,10 @@ def get_media(img_url, imgur_client, imgur_client_secret, image_dir, logger):
             return
         # Download the 2MB version because Tweepy has 3MB upload limit for GIFs
         gfycat_url = gfycat_info['gfyItem']['max2mbGif']
-        file_path = image_dir + '/' + gfycat_name + '.gif'
+        file_path = image_dir + '/lr_' + gfycat_name + '.gif'
         logger.info('Downloading Gfycat at URL %s to %s' %
                     (gfycat_url, file_path))
-        gfycat_file = save_file(gfycat_url, file_path, logger)
-        return gfycat_file
+        return save_file(gfycat_url, file_path, logger)
     elif 'giphy.com' in img_url:  # Giphy
         # Working demo of regex: https://regex101.com/r/o8m1kA/2
         regex = r"https?://((?:.*)giphy\.com/media/|giphy.com/gifs/|i.giphy.com/)(.*-)?(\w+)(/|\n)"
@@ -145,7 +219,7 @@ def get_media(img_url, imgur_client, imgur_client_secret, image_dir, logger):
             # upload limit for GIFs
             giphy_url = 'https://media.giphy.com/media/'
             giphy_url += giphy_id + '/giphy-downsized.gif'
-            file_path = image_dir + '/' + giphy_id + '-downsized.gif'
+            file_path = image_dir + '/lr_' + giphy_id + '-downsized.gif'
             logger.info('Downloading Giphy at %s to %s' %
                         (giphy_url, file_path))
             giphy_file = save_file(giphy_url, file_path, logger)
@@ -173,7 +247,7 @@ def get_media(img_url, imgur_client, imgur_client_secret, image_dir, logger):
         if meta["content-type"] in image_formats:
             # URL appears to be an image, so download it
             file_name = os.path.basename(urllib.parse.urlsplit(img_url).path)
-            file_path = image_dir + '/' + file_name
+            file_path = image_dir + '/lr_' + file_name
             logger.info('Downloading file at %s to %s' % (img_url, file_path))
             try:
                 img = save_file(img_url, file_path, logger)
@@ -205,7 +279,7 @@ def get_hd_media(submission, imgur_client, imgur_client_secret, image_dir, logge
             file_name += '.jpg'
             media_url += '.jpg'
         # Download the file
-        file_path = image_dir + '/' + file_name
+        file_path = image_dir + '/hr_' + file_name
         logger.info(
             'Downloading file at URL %s to %s, file type identified as %s' %
             (media_url, file_path, file_extension))
@@ -216,11 +290,10 @@ def get_hd_media(submission, imgur_client, imgur_client_secret, image_dir, logge
             # Get URL for MP4 version of reddit video
             video_url = submission.media['reddit_video']['fallback_url']
             # Download the file
-            file_path = image_dir + '/' + submission.id + '.mp4'
+            file_path = image_dir + '/hr_' + submission.id + '.mp4'
             logger.info('Downloading Reddit video at URL %s to %s' %
                         (video_url, file_path))
-            video = save_file(video_url, file_path, logger)
-            return video
+            return save_file(video_url, file_path, logger)
         else:
             logger.error('Reddit API returned no media for this URL: %s' % media_url)
             return
@@ -249,15 +322,13 @@ def get_hd_media(submission, imgur_client, imgur_client_secret, image_dir, logge
                     imgur_url = client.get_image(giphy_id).link
             file_extension = os.path.splitext(imgur_url)[-1].lower()
             # Download the image
-            file_path = image_dir + '/' + giphy_id + file_extension
+            file_path = image_dir + '/hr_' + giphy_id + file_extension
             logger.info(' Downloading Imgur image at URL %s to %s' % (imgur_url, file_path))
-            imgur_file = save_file(imgur_url, file_path, logger)
-            return imgur_file
+            return save_file(imgur_url, file_path, logger)
         else:
             logger.error('Could not identify Imgur image/gallery ID at: %s' % media_url)
             return
     elif 'gfycat.com' in media_url:  # Gfycat
-        gfycat_url = ""
         try:
             gfycat_name = os.path.basename(urllib.parse.urlsplit(media_url).path)
             gfycat_url = get_gfycat_mp4_download_url(media_url, logger)
@@ -267,10 +338,9 @@ def get_hd_media(submission, imgur_client, imgur_client_secret, image_dir, logge
         if gfycat_url == '':
             logger.debug('Empty Gfycat URL for %s; no attachment to download' % submission.id)
             return
-        file_path = image_dir + '/' + gfycat_name + '.mp4'
+        file_path = image_dir + '/hr_' + gfycat_name + '.mp4'
         logger.info('Downloading Gfycat at URL %s to %s' % (gfycat_url, file_path))
-        gfycat_file = save_file(gfycat_url, file_path, logger)
-        return gfycat_file
+        return save_file(gfycat_url, file_path, logger)
     elif 'giphy.com' in media_url:  # Giphy
         # Working demo of regex: https://regex101.com/r/o8m1kA/2
         regex = r"https?://((?:.*)giphy\.com/media/|giphy.com/gifs/|i.giphy.com/)(.*-)?(\w+)(/|\n)"
@@ -280,10 +350,9 @@ def get_hd_media(submission, imgur_client, imgur_client_secret, image_dir, logge
             giphy_id = m.group(3)
             # Download the MP4 version of the GIF
             giphy_url = 'https://media.giphy.com/media/' + giphy_id + '/giphy.mp4'
-            file_path = image_dir + '/' + giphy_id + 'giphy.mp4'
+            file_path = image_dir + '/hr_' + giphy_id + 'giphy.mp4'
             logger.info('Downloading Giphy at URL %s to %s' % (giphy_url, file_path))
-            giphy_file = save_file(giphy_url, file_path, logger)
-            return giphy_file
+            return save_file(giphy_url, file_path, logger)
         else:
             logger.error('Could not identify Giphy ID in this URL: %s' % media_url)
             return
@@ -299,7 +368,7 @@ def get_hd_media(submission, imgur_client, imgur_client_secret, image_dir, logge
         if meta["content-type"] in image_formats:
             # URL appears to be an image, so download it
             file_name = os.path.basename(urllib.parse.urlsplit(media_url).path)
-            file_path = image_dir + '/' + file_name
+            file_path = image_dir + '/hr_' + file_name
             logger.info('Downloading file at URL %s to %s' % (media_url, file_path))
             try:
                 img = save_file(media_url, file_path, logger)
