@@ -1,6 +1,6 @@
 import configparser
 import csv
-import distutils.core
+import distutils.util
 import logging
 import os
 import sys
@@ -15,6 +15,7 @@ from mastodon import Mastodon
 
 from getmedia import MediaAttachment
 from getmedia import get_media
+from monitoring import HealthChecks
 
 MAX_LEN_TWEET = 280
 MAX_LEN_TOOT = 500
@@ -273,6 +274,12 @@ if config['BotSettings']['LogLevel']:
 # Settings related to promotional messages
 PROMO_EVERY = int(config['PromoSettings']['PromoEvery'])
 PROMO_MESSAGE = config['PromoSettings']['PromoMessage']
+# HealthChecks related settings
+do_healtchecks = False
+hc_base_url = config['HealthChecks']['BaseUrl']
+hc_uid = config['HealthChecks']['UID']
+if len(hc_base_url) > 0:
+    do_healtchecks = True
 # Settings related to media attachments
 MEDIA_POSTS_ONLY = bool(
     distutils.util.strtobool(config['MediaSettings']['MediaPostsOnly']))
@@ -299,7 +306,7 @@ try:
     ) as url:
         s = url.read()
         new_version = s.decode("utf-8").rstrip()
-        current_version = 2.7  # Current version of script
+        current_version = 2.8  # Current version of script
         if current_version < float(new_version):
             logger.warning('A new version of Tootbot (' + str(new_version) +
                            ') is available! (you have ' +
@@ -494,6 +501,11 @@ if os.name == 'nt':
     except:
         os.system('title Tootbot')
 
+# Setup healthcheck monitoring
+healthcheck = HealthChecks(base_url=hc_base_url,
+                           uid=hc_uid,
+                           logger=logger)
+
 # Run the main script
 NUM_NON_PROMO_MESSAGES = 0  # type: int
 while True:
@@ -507,9 +519,13 @@ while True:
         new_cache_file.close()
     # Continue with script
     try:
+        if do_healtchecks:
+            healthcheck.check_start()
         reddit_connection = setup_connection_reddit(SUBREDDIT_TO_MONITOR)
         reddit_posts = get_reddit_posts(reddit_connection)
         make_post(reddit_posts)
+        if do_healtchecks:
+            healthcheck.check_ok()
     except BaseException as e:
         logger.error('Error in main process: %s' % e)
 

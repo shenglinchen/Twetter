@@ -13,8 +13,7 @@ def get_gfycat_mp4_download_url(media_url, logger):
     mp4_url = ""
     for tag in soup.find_all("source", src=True):
         src = tag['src']
-        if "giant" in src:
-            if "mp4" in src:
-                mp4_url = src
+        if "giant" in src and "mp4" in src:
+            mp4_url = src
 
     return mp4_url
