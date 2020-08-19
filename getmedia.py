@@ -24,6 +24,7 @@ class MediaAttachment:
         self.__media_path_low_res = None
         self.__media_path_high_res = None
         self.__media_url = media_url
+        self.logger = logger
 
         if download_for in [self.LOW_RES, self.HIGH_AND_LOW_RES]:
             self.__media_path_low_res = get_media(self.__media_url,
@@ -54,17 +55,20 @@ class MediaAttachment:
                     sha256.update(byte_block)
         self.__check_sum_high_res = sha256.hexdigest()
 
-    def destroy(self, logger):
+    def destroy(self):
 
         try:
             if self.__media_path_high_res is not None:
                 os.remove(self.__media_path_high_res)
-                logger.info('Deleted media file at %s' % self.__media_path_high_res)
+                if self.logger is not None:
+                    self.logger.info('Deleted media file at %s' % self.__media_path_high_res)
             if self.__media_path_low_res is not None:
                 os.remove(self.__media_path_low_res)
-                logger.info('Deleted media file at %s' % self.__media_path_low_res)
+                if self.logger is not None:
+                    self.logger.info('Deleted media file at %s' % self.__media_path_low_res)
         except BaseException as e:
-            logger.error('Error while deleting media file: %s' % e)
+            if self.logger is not None:
+                self.logger.error('Error while deleting media file: %s' % e)
 
         self.__media_path_high_res = None
         self.__media_path_low_res = None
@@ -129,7 +133,7 @@ def get_media(img_url, imgur_client, imgur_client_secret, image_dir, logger):
         # Download the file
         file_path = image_dir + '/lr_' + file_name
         logger.info(
-            'downloading file at URL %s to %s, file type identified as %s' %
+            'Downloading file at URL %s to %s, file type identified as %s' %
             (img_url, file_path, file_extension))
         img = save_file(img_url, file_path, logger)
         return img
@@ -323,7 +327,7 @@ def get_hd_media(submission, imgur_client, imgur_client_secret, image_dir, logge
             file_extension = os.path.splitext(imgur_url)[-1].lower()
             # Download the image
             file_path = image_dir + '/hr_' + giphy_id + file_extension
-            logger.info(' Downloading Imgur image at URL %s to %s' % (imgur_url, file_path))
+            logger.info('Downloading Imgur image at URL %s to %s' % (imgur_url, file_path))
             return save_file(imgur_url, file_path, logger)
         else:
             logger.error('Could not identify Imgur image/gallery ID at: %s' % media_url)
