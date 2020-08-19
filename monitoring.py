@@ -15,6 +15,9 @@ class HealthChecks:
         try:
             response = requests.put(url, data=data, timeout=3)
             response.raise_for_status()
+            if self.logger is not None:
+                check_type = 'OK' if check_type is None else check_type
+            self.logger.info('Monitoring ping sent of type: %s' % check_type)
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as ce:
             if self.logger is not None:
                 self.logger.error('During Monitoring "OK Ping" we got: %s' % ce)
