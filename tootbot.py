@@ -279,17 +279,17 @@ coloredlogs.install(
 try:
     response = requests.get('https://gitlab.com/marvin8/tootbot/-/raw/main/update-check/current-version.txt')
     response.raise_for_status()
-    new_version = response.content.decode('utf-8').strip()
-    current_version = 2.10  # Current version of script
-    if current_version < float(new_version):
-        logger.warning('A new version of Tootbot (' + str(new_version) +
-                       ') is available! (you have ' +
-                       str(current_version) + ')')
-        logger.warning(
-            'Get the latest update from here: https://gitlab.com/marvin8/tootbot/'
-        )
+    repo_version = response.content.decode('utf-8').strip().partition('.')
+    repo_version_major = int(repo_version[0].strip())
+    repo_version_minor = int(repo_version[2].strip())
+    this_version_major = 2  # Current major version of this code
+    this_version_minor = 11  # Current minor version of this code
+    if this_version_major >= repo_version_major and this_version_minor >= repo_version_minor:
+        logger.info('You have the latest version of Tootbot (%s.%s)' % (this_version_major, this_version_minor))
     else:
-        logger.info('You have the latest version of Tootbot (' + str(current_version) + ')')
+        logger.warning('A new version of Tootbot (%s.%s) is available! (you have %s.%s)' %
+                       (repo_version_major, repo_version_minor, this_version_major, this_version_minor))
+        logger.warning('Get the latest update from here: https://gitlab.com/marvin8/tootbot/')
 except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, requests.exceptions.HTTPError) as re:
     logger.error('while checking for updates we got this error: %s' % re)
 
