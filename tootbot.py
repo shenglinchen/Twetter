@@ -277,10 +277,10 @@ coloredlogs.install(
 
 # Check for updates
 try:
-    response = requests.get('https://gitlab.com/marvin8/tootbot/-/raw/master/update-check/current-version.txt')
+    response = requests.get('https://gitlab.com/marvin8/tootbot/-/raw/main/update-check/current-version.txt')
     response.raise_for_status()
     new_version = response.content.decode('utf-8').strip()
-    current_version = 2.09  # Current version of script
+    current_version = 2.10  # Current version of script
     if current_version < float(new_version):
         logger.warning('A new version of Tootbot (' + str(new_version) +
                        ') is available! (you have ' +
