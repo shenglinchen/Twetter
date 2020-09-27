@@ -28,8 +28,8 @@ def get_caption(submission, max_len, addhashtags=None):
     # Create string of hashtags
     hashtag_string = ''
     promo_string = ''
-    hashtags_for_subreddit = [x.strip() for x in addhashtags.split(',')]
-    hashtags_for_post = hashtags_for_subreddit + HASHTAGS
+    hashtags_for_subreddit = [x.strip() for x in addhashtags.split(',')] if addhashtags is not None else None
+    hashtags_for_post = hashtags_for_subreddit + HASHTAGS if addhashtags is not None else HASHTAGS
     if hashtags_for_post:
         for tag in hashtags_for_post:
             # Add hashtag to string, followed by a space for the next one
@@ -101,7 +101,7 @@ def make_post(posts):
                             twitter_api = tweepy.API(twitter_auth)
                             NUM_NON_PROMO_MESSAGES += 1
                             # Generate post caption
-                            caption = get_caption(source_posts[post], MAX_LEN_TWEET)
+                            caption = get_caption(source_posts[post], MAX_LEN_TWEET, addhashtags=additional_hashtags)
                             # Post the tweet
                             if media_file:
                                 logger.info('Posting this on Twitter with media %s' % caption)
@@ -150,8 +150,12 @@ def make_post(posts):
 
                     # Check for duplicate of attachment sha256
                     if duplicate_check(attachment.check_sum_high_res):
-                        logger.info('Skipping %s because attachment with hash %s has already been posted' % (
-                            post_id, attachment.check_sum_high_res))
+                        logger.info('Skipping %s because attachment with hash %s has already been posted' %
+                                    (post_id, attachment.check_sum_high_res))
+                        log_post(post_id,
+                                 'Mastodon: Skipped because image with hash has already been posted',
+                                 '',
+                                 attachment.check_sum_high_res)
                         attachment.destroy()
                         continue
 
@@ -283,7 +287,7 @@ try:
     repo_version_major = int(repo_version[0].strip())
     repo_version_minor = int(repo_version[2].strip())
     this_version_major = 2  # Current major version of this code
-    this_version_minor = 11  # Current minor version of this code
+    this_version_minor = 12  # Current minor version of this code
     if this_version_major >= repo_version_major and this_version_minor >= repo_version_minor:
         logger.info('You have the latest version of Tootbot (%s.%s)' % (this_version_major, this_version_minor))
     else:
@@ -496,16 +500,13 @@ while True:
     if do_healthchecks:
         healthcheck.check_start()
 
-    try:
-        reddit_posts = {}
-        for subreddit, hashtags in SUBREDDITS:
-            reddit_posts[hashtags] = reddit.get_reddit_posts(subreddit,
-                                                             NSFW_POSTS_ALLOWED,
-                                                             SELF_POSTS_ALLOWED,
-                                                             SPOILERS_ALLOWED)
-        make_post(reddit_posts)
-    except BaseException as e:
-        logger.error('Error in main process: %s' % e)
+    reddit_posts = {}
+    for subreddit, hashtags in SUBREDDITS:
+        reddit_posts[hashtags] = reddit.get_reddit_posts(subreddit,
+                                                         NSFW_POSTS_ALLOWED,
+                                                         SELF_POSTS_ALLOWED,
+                                                         SPOILERS_ALLOWED)
+    make_post(reddit_posts)
 
     if do_healthchecks:
         healthcheck.check_ok()
