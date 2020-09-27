@@ -2,6 +2,14 @@
 
 This is a Python bot that looks up posts from specified subreddits and automatically posts them on Twitter and/or [Mastodon](https://joinmastodon.org/). It is based on [reddit-twitter-bot](https://github.com/rhiever/reddit-twitter-bot). Tootbot is now used by [a wide variety of social media accounts](https://github.com/corbindavenport/tootbot/wiki/Accounts-using-Tootbot).
 
+---
+
+**!!! Please be aware that the current version of tootbot from this repo has bugs in the posting to Twitter code.  !!!** 
+
+I am working on acquiring a Twitter developer account and fixing issues around posting to Twitter. You can follow [Issue 3](https://gitlab.com/marvin8/tootbot/-/issues/3) in this repo for progress.
+
+---
+
 **Features:**
 
 * Tootbot can post to both Twitter and [Mastodon](https://joinmastodon.org/)
@@ -31,3 +39,7 @@ The developers of Tootbot hold no liability for what you do with this script or 
 ## Setup and usage
 
 For instructions on setting up and using Tootbot, please visit [the wiki](https://gitlab.com/marvin8/tootbot/-/wikis/home)
+
+## Support this project
+
+You can now support my work on this project by [buying me a coffee](https://www.buymeacoffee.com/marvin8).
