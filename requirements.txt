@@ -6,3 +6,5 @@ mastodon.py
 coloredlogs
 requests
 beautifulsoup4
+arrow
+prawcore
