@@ -1,12 +1,18 @@
 # Tootbot
 
-This is a Python bot that looks up posts from specified subreddits and automatically posts them on Twitter and/or [Mastodon](https://joinmastodon.org/). It is based on [reddit-twitter-bot](https://github.com/rhiever/reddit-twitter-bot). Tootbot is now used by [a wide variety of social media accounts](https://github.com/corbindavenport/tootbot/wiki/Accounts-using-Tootbot).
+This is a Python bot that looks up posts from specified subreddits and automatically posts them on Twitter and/or 
+[Mastodon](https://joinmastodon.org/). It is based on 
+[reddit-twitter-bot](https://github.com/rhiever/reddit-twitter-bot). Tootbot is now used by 
+[a wide variety of social media accounts](https://github.com/corbindavenport/tootbot/wiki/Accounts-using-Tootbot).
 
 ---
 
-**!!! Please be aware that the current version of tootbot from this repo has bugs in the posting to Twitter code.  !!!** 
+**!!! Please be aware that I am not overly confident in the Twitter related code.  !!!** 
 
-I am working on acquiring a Twitter developer account and fixing issues around posting to Twitter. You can follow [Issue 3](https://gitlab.com/marvin8/tootbot/-/issues/3) in this repo for progress.
+Posting to Twitter seems to be working at this time, but as II haven't been able to get a Twitter developer account, 
+I haven't been able to properly test the Twitter related code in Tootbot. Twitter has stopped responding to me :(  
+You can follow [Issue 3](https://gitlab.com/marvin8/tootbot/-/issues/3) in this repo for more info around Twitter..
+
 
 ---
 
@@ -14,16 +20,19 @@ I am working on acquiring a Twitter developer account and fixing issues around p
 
 * Tootbot can post to both Twitter and [Mastodon](https://joinmastodon.org/)
 * Media from direct links, Gfycat, Imgur, Reddit, and Giphy is automatically attached in the social media post
-* Links that do not contain media can be skipped, ideal for meme accounts like [@badreactiongifs](https://twitter.com/badreactiongifs)
+* Links that do not contain media can be skipped, ideal for meme accounts like 
+  [@badreactiongifs](https://twitter.com/badreactiongifs)
 * NSFW content, spoilers, and self-posts can be filtered
 * Tootbot can monitor multiple subreddits at once
 * Tootbot is fully open-source, so you don't have to give an external service full access to your social media accounts
 * Tootbot also checks the sha256 checksum of media files to stop posting of the same media file from different subreddits.
 * Tootbot can ping a [Healthchecks](https://healthchecks.io/) instance for monitoring continuous operation of Tootbot
+* Optionally delete older Mastodon toots older than a configurable number of days.
 
 Tootbot uses the 
+[arrow](https://arrow.readthedocs.io/en/stable/)
 [tweepy](https://github.com/tweepy/tweepy), 
-[PRAW](https://praw.readthedocs.io/en/latest/), 
+[PRAW](https://praw.readthedocs.io/en/latest/), prawcore,
 [py-gfycat](https://github.com/ankeshanand/py-gfycat),
 [imgurpython](https://github.com/Imgur/imgurpython), 
 [Pillow](https://github.com/python-pillow/Pillow), 
