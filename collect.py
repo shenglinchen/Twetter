@@ -5,10 +5,35 @@ to be posted to Mastodon and/or Twitter
 
 import configparser
 import os
+import re
 import sys
+import urllib
 
 import praw
 import prawcore.exceptions
+import requests
+from PIL import Image
+from gfycat.client import GfycatClient
+from imgurpython import ImgurClient
+from imgurpython.helpers.error import ImgurClientError
+from gfycat.error import GfycatClientError
+from gfycathack import get_gfycat_mp4_download_url
+
+
+# Function for downloading images from a URL to media folder
+def save_file(img_url, file_path, logger):
+    resp = requests.get(img_url, stream=True)
+    if resp.status_code == 200:
+        with open(file_path, 'wb') as image_file:
+            for chunk in resp:
+                image_file.write(chunk)
+        # Return the path of the image, which is always the same since we
+        # just overwrite images
+        image_file.close()
+        return file_path
+
+    logger.error('File failed to download. Status code: %s' % resp.status_code)
+    return None
 
 
 class RedditHelper:
@@ -100,3 +125,131 @@ class RedditHelper:
             self.logger.warn('Encountered and error getting reddit posts: $%', reddit_exception)
 
         return posts
+
+
+class ImgurHelper:
+
+    def __init__(self, logger, secrets_file='imgur.secret'):
+        self.logger = logger
+
+        # Setup and verify Imgur access
+        if not os.path.exists(secrets_file):
+            self.logger.warning('Imgur API keys not found. (See wiki if you need help).')
+
+            # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
+            imgur_client_id = ''.join(input("[ .. ] Enter Imgur client ID: ").split())
+            imgur_client_secret = ''.join(input("[ .. ] Enter Imgur client secret: ").split())
+            # Make sure authentication is working
+            try:
+                imgur_client_id = ImgurClient(imgur_client_id, imgur_client_secret)
+
+                # If this call doesn't work, it'll throw an ImgurClientError
+                imgur_client_id.get_album('dqOyj')
+                # It worked, so save the keys to a file
+                imgur_config = configparser.ConfigParser()
+                imgur_config['Imgur'] = {
+                    'ClientID': imgur_client_id,
+                    'ClientSecret': imgur_client_secret
+                }
+                with open(secrets_file, 'w') as f:
+                    imgur_config.write(f)
+                f.close()
+            except ImgurClientError as imgur_error:
+                logger.error('Error while logging into Imgur: %s', imgur_error)
+                logger.error('Tootbot cannot continue, now shutting down')
+                sys.exit(1)
+        else:
+            # Read API keys from secret file
+            imgur_config = configparser.ConfigParser()
+            imgur_config.read(secrets_file)
+
+        self.imgur_client = ImgurClient(imgur_config['Imgur']['ClientID'],
+                                        imgur_config['Imgur']['ClientSecret'],
+                                        )
+        self.gfycat_client = GfycatClient(imgur_config['Imgur']['ClientID'],
+                                          imgur_config['Imgur']['ClientSecret'],
+                                          )
+
+    def get_imgur_image(self, img_url, save_dir):
+        # Working demo of regex: https://regex101.com/r/G29uGl/2
+        regex = r"(?:.*)imgur\.com(?:\/gallery\/|\/a\/|\/)(.*?)(?:\/.*|\.|$)"
+        m = re.search(regex, img_url, flags=0)
+
+        if not m:
+            self.logger.error('Could not identify Imgur image/gallery ID at: %s', img_url)
+            return None
+
+        # Get the Imgur image/gallery ID
+        imgur_id = m.group(1)
+        if any(s in img_url for s in ('/a/', '/gallery/')):  # Gallery links
+            images = self.imgur_client.get_album_images(imgur_id)
+            # Only the first image in a gallery is used
+            imgur_url = images[0].link
+        else:  # Single image
+            imgur_url = self.imgur_client.get_image(imgur_id).link
+
+        # If the URL is a GIFV or MP4 link, change it to the GIF version
+        file_extension = os.path.splitext(imgur_url)[-1].lower()
+        if file_extension == '.gifv':
+            file_extension = '.gif'
+            imgur_url = imgur_url.replace('.gifv', '.gif')
+        elif file_extension == '.mp4':
+            file_extension = '.gif'
+            imgur_url = imgur_url.replace('.mp4', '.gif')
+
+        # Download the image
+        file_path = save_dir + '/lr_' + imgur_id + file_extension
+        self.logger.info('Downloading Imgur image at URL %s to %s', imgur_url, file_path)
+        imgur_file = save_file(imgur_url, file_path, self.logger)
+
+        # Imgur will sometimes return a single-frame thumbnail
+        # instead of a GIF, so we need to check for this
+        if file_extension == '.gif':
+            # Open the file using the Pillow library
+            img = Image.open(imgur_file)
+            # Get the MIME type
+            mime = Image.MIME[img.format]
+            img.close()
+
+            # Image is not actually a GIF, so don't post it
+            if mime != 'image/gif':
+                self.logger.warn('Imgur: not a GIF, not posted to Twitter')
+                # Delete the image
+                try:
+                    os.remove(imgur_file)
+                except OSError as os_error:
+                    self.logger.error('Error while deleting media file: %s', os_error)
+                return None
+
+        return imgur_file
+
+    def get_gfycat_image_lowres(self, img_url, save_dir):
+        try:
+            gfycat_name = os.path.basename(urllib.parse.urlsplit(img_url).path)
+            client = self.gfycat_client
+            gfycat_info = client.query_gfy(gfycat_name)
+        except GfycatClientError as gfycat_error:
+            self.logger.error('Error downloading Gfycat link: %s', gfycat_error)
+            return None
+
+        # Download the 2MB version because Tweepy has 3MB upload limit for GIFs
+        gfycat_url = gfycat_info['gfyItem']['max2mbGif']
+        file_path = save_dir + '/lr_' + gfycat_name + '.gif'
+        self.logger.info('Downloading Gfycat at URL %s to %s', gfycat_url, file_path)
+        return save_file(gfycat_url, file_path, self.logger)
+
+    def get_gfycat_image(self, img_url, save_dir):
+        try:
+            gfycat_name = os.path.basename(urllib.parse.urlsplit(img_url).path)
+            gfycat_url = get_gfycat_mp4_download_url(img_url, self.logger)
+        except GfycatClientError as gfycat_error:
+            self.logger.error('Error downloading Gfycat link: %s', gfycat_error)
+            return None
+
+        if gfycat_url == '':
+            self.logger.debug('Empty Gfycat URL; no attachment to download')
+            return None
+
+        file_path = save_dir + '/hr_' + gfycat_name + '.mp4'
+        self.logger.info('Downloading Gfycat at URL %s to %s', gfycat_url, file_path)
+        return save_file(gfycat_url, file_path, self.logger)

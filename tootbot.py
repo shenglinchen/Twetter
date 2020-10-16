@@ -8,9 +8,9 @@ import time
 import coloredlogs
 import requests
 import tweepy
-from imgurpython import ImgurClient
 from mastodon import Mastodon, MastodonError
 
+from collect import ImgurHelper
 from collect import RedditHelper
 from control import PostRecorder
 from getmedia import MediaAttachment
@@ -54,27 +54,7 @@ def get_caption(submission, max_len, addhashtags=None):
     return caption
 
 
-# TBD ???
-# def duplicate_check(identifier):
-#     value = False
-#     with open(CACHE_CSV, 'rt', newline='') as cache_file:
-#         reader = csv.reader(cache_file, delimiter=',')
-#         for row in reader:
-#             if identifier in row:
-#                 value = True
-#     cache_file.close()
-#     return value
-#
-#
-# def log_post(reddit_id, post_url, shared_url, check_sum):
-#     with open(CACHE_CSV, 'a', newline='') as cache_file:
-#         date = time.strftime("%d/%m/%Y") + ' ' + time.strftime("%H:%M:%S")
-#         cache_csv_writer = csv.writer(cache_file, delimiter=',')
-#         cache_csv_writer.writerow([reddit_id, date, post_url, shared_url, check_sum])
-#     cache_file.close()
-#
-
-def make_post(posts, post_recorder):
+def make_post(posts, duplicate_checker, imgur_helper):
     global NUM_NON_PROMO_MESSAGES
     break_to_mainloop = False
     for additional_hashtags, source_posts in posts.items():
@@ -85,15 +65,14 @@ def make_post(posts, post_recorder):
             # Grab post details from dictionary
             post_id = source_posts[post].id
             shared_url = source_posts[post].url
-            if not (post_recorder.duplicate_check(post_id) or
-                    post_recorder.duplicate_check(shared_url)):
+            if not (duplicate_checker.duplicate_check(post_id) or
+                    duplicate_checker.duplicate_check(shared_url)):
                 logger.debug('Processing reddit post: %s', source_posts[post])
                 # Post on Twitter
                 if POST_TO_TWITTER:
                     # Download Twitter-compatible version of media file
                     # (static image or GIF under 3MB)
-                    media_file = get_media(shared_url, IMGUR_CLIENT, IMGUR_CLIENT_SECRET, IMAGE_DIR,
-                                           logger)
+                    media_file = get_media(shared_url, imgur_helper, IMAGE_DIR, logger)
                     # Make sure the post contains media,
                     # if MEDIA_POSTS_ONLY in config is set to True
                     if (((MEDIA_POSTS_ONLY is True) and media_file) or
@@ -123,7 +102,7 @@ def make_post(posts, post_recorder):
                                 logger.info('Posting this on Twitter: %s', caption)
                                 tweet = twitter_api.update_status(status=caption)
                             # Log the tweet
-                            post_recorder.log_post(
+                            duplicate_checker.log_post(
                                 post_id, 'https://twitter.com/' +
                                          twitter_username + '/status/' + tweet.id_str + '/',
                                 shared_url,
@@ -131,14 +110,15 @@ def make_post(posts, post_recorder):
                         except BaseException as e:
                             logger.error('Error while posting tweet: %s', e)
                             # Log the post anyways
-                            post_recorder.log_post(post_id, 'Error while posting tweet: %s' % e, '',
-                                                   '')
+                            duplicate_checker.log_post(post_id, 'Error while posting tweet: %s' % e,
+                                                       '',
+                                                       '')
                     else:
                         logger.warning(
                             'Twitter: Skipping %s because non-media posts are disabled or the media file was not found',
                             post_id)
                         # Log the post anyways
-                        post_recorder.log_post(
+                        duplicate_checker.log_post(
                             post_id,
                             'Twitter: Skipped because non-media posts are disabled or the media file was not found',
                             '',
@@ -149,22 +129,21 @@ def make_post(posts, post_recorder):
                 if MASTODON_INSTANCE_DOMAIN:
 
                     attachment = MediaAttachment(source_posts[post],
-                                                 IMGUR_CLIENT,
-                                                 IMGUR_CLIENT_SECRET,
+                                                 imgur_helper,
                                                  IMAGE_DIR,
                                                  MediaAttachment.HIGH_RES,
                                                  logger
                                                  )
 
                     # Check for duplicate of attachment sha256
-                    if post_recorder.duplicate_check(attachment.check_sum_high_res):
+                    if duplicate_checker.duplicate_check(attachment.check_sum_high_res):
                         logger.info(
                             'Skipping %s because attachment with hash %s has already been posted',
                             post_id, attachment.check_sum_high_res)
-                        post_recorder.log_post(post_id,
-                                               'Mastodon: Skipped because image with hash has already been posted',
-                                               '',
-                                               attachment.check_sum_high_res)
+                        duplicate_checker.log_post(post_id,
+                                                   'Mastodon: Skipped because image with hash has already been posted',
+                                                   '',
+                                                   attachment.check_sum_high_res)
                         attachment.destroy()
                         continue
 
@@ -203,20 +182,21 @@ def make_post(posts, post_recorder):
                                 else:
                                     toot = mastodon.status_post(caption)
                             # Log the toot
-                            post_recorder.log_post(post_id, toot["url"], shared_url,
-                                                   attachment.check_sum_high_res)
+                            duplicate_checker.log_post(post_id, toot["url"], shared_url,
+                                                       attachment.check_sum_high_res)
                         except BaseException as e:
                             logger.error('Error while posting toot: %s', e)
                             # Log the post anyways
-                            post_recorder.log_post(post_id, 'Error while posting toot: %s' % e, '',
-                                                   '')
+                            duplicate_checker.log_post(post_id, 'Error while posting toot: %s' % e,
+                                                       '',
+                                                       '')
 
                     else:
                         logger.warning(
                             'Mastodon: Skipping %s because non-media posts are disabled or media file was not found',
                             post_id)
                         # Log the post anyways
-                        post_recorder.log_post(
+                        duplicate_checker.log_post(
                             post_id,
                             'Mastodon: Skipped because non-media posts are disabled or the media file was not found',
                             '',
@@ -254,8 +234,6 @@ coloredlogs.install(
     datefmt='%H:%M:%S')
 
 # General settings
-# TBD ???
-# CACHE_CSV = config['BotSettings']['CacheFile']
 post_recorder = PostRecorder(config['BotSettings']['CacheFile'], logger)
 DELAY_BETWEEN_TWEETS = int(config['BotSettings']['DelayBetweenPosts'])
 RUN_ONCE_ONLY = bool(
@@ -319,66 +297,6 @@ except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
         requests.exceptions.HTTPError) as re:
     logger.error('while checking for updates we got this error: %s', re)
 
-# TBD ???
-# # Setup and verify Reddit access
-# if not os.path.exists('reddit.secret'):
-#     logger.warning('Reddit API keys not found. (See wiki if you need help).')
-#     # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
-#     REDDIT_AGENT = ''.join(input("[ .. ] Enter Reddit agent: ").split())
-#     REDDIT_CLIENT_SECRET = ''.join(
-#         input("[ .. ] Enter Reddit client secret: ").split())
-#     # Make sure authentication is working
-#     try:
-#         reddit_client = praw.Reddit(user_agent='Tootbot', client_id=REDDIT_AGENT, client_secret=REDDIT_CLIENT_SECRET)
-#         test = reddit_client.subreddit('announcements')
-#         # It worked, so save the keys to a file
-#         reddit_config = configparser.ConfigParser()
-#         reddit_config['Reddit'] = {'Agent': REDDIT_AGENT, 'ClientSecret': REDDIT_CLIENT_SECRET}
-#         with open('reddit.secret', 'w') as f:
-#             reddit_config.write(f)
-#         f.close()
-#     except prawcore.exceptions.ResponseException as re:
-#         logger.error('Error while logging into Reddit: %s', re)
-#         logger.error('Tootbot cannot continue, now shutting down')
-#         exit()
-# else:
-#     # Read API keys from secret file
-#     reddit_config = configparser.ConfigParser()
-#     reddit_config.read('reddit.secret')
-#     REDDIT_AGENT = reddit_config['Reddit']['Agent']
-#     REDDIT_CLIENT_SECRET = reddit_config['Reddit']['ClientSecret']
-
-# Setup and verify Imgur access
-if not os.path.exists('imgur.secret'):
-    logger.warning(
-        'Imgur API keys not found. (See wiki if you need help).'
-    )
-    # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
-    IMGUR_CLIENT = ''.join(input("[ .. ] Enter Imgur client ID: ").split())
-    IMGUR_CLIENT_SECRET = ''.join(input("[ .. ] Enter Imgur client secret: ").split())
-    # Make sure authentication is working
-    try:
-        imgur_client = ImgurClient(IMGUR_CLIENT, IMGUR_CLIENT_SECRET)
-        test_gallery = imgur_client.get_album('dqOyj')
-        # It worked, so save the keys to a file
-        imgur_config = configparser.ConfigParser()
-        imgur_config['Imgur'] = {
-            'ClientID': IMGUR_CLIENT,
-            'ClientSecret': IMGUR_CLIENT_SECRET
-        }
-        with open('imgur.secret', 'w') as f:
-            imgur_config.write(f)
-        f.close()
-    except BaseException as me:
-        logger.error('Error while logging into Imgur: %s', me)
-        logger.error('Tootbot cannot continue, now shutting down')
-        exit()
-else:
-    # Read API keys from secret file
-    imgur_config = configparser.ConfigParser()
-    imgur_config.read('imgur.secret')
-    IMGUR_CLIENT = imgur_config['Imgur']['ClientID']
-    IMGUR_CLIENT_SECRET = imgur_config['Imgur']['ClientSecret']
 # Log into Twitter if enabled in settings
 if POST_TO_TWITTER is True:
     if os.path.exists('twitter.secret'):
@@ -502,16 +420,6 @@ if os.name == 'nt':
     except OSError:
         os.system('title Tootbot')
 
-# TBD ???
-# # Make sure logging file and media directory exists
-# if not os.path.exists(CACHE_CSV):
-#     with open(CACHE_CSV, 'w', newline='') as new_cache_file:
-#         default = ['Reddit post ID', 'Date and time', 'Post link', 'Media Checksum']
-#         wr = csv.writer(new_cache_file)
-#         wr.writerow(default)
-#     logger.info('%s file not found, created a new one', CACHE_CSV)
-#     new_cache_file.close()
-
 # Setup healthcheck monitoring
 healthcheck = HealthChecks(base_url=hc_base_url,
                            uid=hc_uid,
@@ -521,6 +429,8 @@ reddit = RedditHelper(logger=logger)
 reddit.allow_nsfw = NSFW_POSTS_ALLOWED
 reddit.allow_self = SELF_POSTS_ALLOWED
 reddit.allow_spoilers = SPOILERS_ALLOWED
+
+imgur = ImgurHelper(logger)
 
 mastodon_publisher = MastodonPublisher(mastodon, mastodon_user, logger)
 
@@ -533,7 +443,7 @@ while True:
     reddit_posts = {}
     for subreddit, hashtags in SUBREDDITS:
         reddit_posts[hashtags] = reddit.get_reddit_posts(subreddit)
-    make_post(reddit_posts, post_recorder)
+    make_post(reddit_posts, post_recorder, imgur)
 
     if MASTODON_DELETE_AFTER_DAYS > 0:
         logger.info('Deleting Toots older than %s days', MASTODON_DELETE_AFTER_DAYS)
