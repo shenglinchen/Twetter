@@ -7,21 +7,32 @@ import configparser
 import os
 import re
 import sys
-import urllib
+from urllib.parse import urlsplit
 
 import praw
 import prawcore.exceptions
 import requests
 from PIL import Image
+from bs4 import BeautifulSoup
 from gfycat.client import GfycatClient
+from gfycat.error import GfycatClientError
 from imgurpython import ImgurClient
 from imgurpython.helpers.error import ImgurClientError
-from gfycat.error import GfycatClientError
-from gfycathack import get_gfycat_mp4_download_url
 
 
 # Function for downloading images from a URL to media folder
 def save_file(img_url, file_path, logger):
+    """
+    Utility method to save a file located at img_url to a file located at filepath
+
+        Arguments:
+            img_url (string): url of imgur image to download
+            file_path (string): directory and filename where to save the downloaded image to
+            logger (logger): logger to use for logging messages
+
+        Returns:
+            file_path (string): path to downloaded image or None if no image was downloaded
+    """
     resp = requests.get(img_url, stream=True)
     if resp.status_code == 200:
         with open(file_path, 'wb') as image_file:
@@ -128,6 +139,9 @@ class RedditHelper:
 
 
 class ImgurHelper:
+    """
+    ImgurHelper provides methods to collect data / content from Imgur and Gfycat
+    """
 
     def __init__(self, logger, secrets_file='imgur.secret'):
         self.logger = logger
@@ -151,9 +165,9 @@ class ImgurHelper:
                     'ClientID': imgur_client_id,
                     'ClientSecret': imgur_client_secret
                 }
-                with open(secrets_file, 'w') as f:
-                    imgur_config.write(f)
-                f.close()
+                with open(secrets_file, 'w') as file:
+                    imgur_config.write(file)
+                file.close()
             except ImgurClientError as imgur_error:
                 logger.error('Error while logging into Imgur: %s', imgur_error)
                 logger.error('Tootbot cannot continue, now shutting down')
@@ -171,16 +185,26 @@ class ImgurHelper:
                                           )
 
     def get_imgur_image(self, img_url, save_dir):
+        """
+        get_imgur_image downloads images from imgur.
+
+        Arguments:
+            img_url (string): url of imgur image to download
+            save_dir (string): directory where to save the downloaded image to
+
+        Returns:
+            file_path (string): path to downloaded image or None if no image was downloaded
+        """
         # Working demo of regex: https://regex101.com/r/G29uGl/2
         regex = r"(?:.*)imgur\.com(?:\/gallery\/|\/a\/|\/)(.*?)(?:\/.*|\.|$)"
-        m = re.search(regex, img_url, flags=0)
+        regex_match = re.search(regex, img_url, flags=0)
 
-        if not m:
+        if not regex_match:
             self.logger.error('Could not identify Imgur image/gallery ID at: %s', img_url)
             return None
 
         # Get the Imgur image/gallery ID
-        imgur_id = m.group(1)
+        imgur_id = regex_match.group(1)
         if any(s in img_url for s in ('/a/', '/gallery/')):  # Gallery links
             images = self.imgur_client.get_album_images(imgur_id)
             # Only the first image in a gallery is used
@@ -224,8 +248,18 @@ class ImgurHelper:
         return imgur_file
 
     def get_gfycat_image_lowres(self, img_url, save_dir):
+        """
+        get_gfycat_image_lowres downloads low resolution images from gfycat.
+
+        Arguments:
+            img_url (string): url of imgur image to download
+            save_dir (string): directory where to save the downloaded image to
+
+        Returns:
+            file_path (string): path to downloaded image or None if no image was downloaded
+        """
         try:
-            gfycat_name = os.path.basename(urllib.parse.urlsplit(img_url).path)
+            gfycat_name = os.path.basename(urlsplit(img_url).path)
             client = self.gfycat_client
             gfycat_info = client.query_gfy(gfycat_name)
         except GfycatClientError as gfycat_error:
@@ -239,10 +273,27 @@ class ImgurHelper:
         return save_file(gfycat_url, file_path, self.logger)
 
     def get_gfycat_image(self, img_url, save_dir):
+        """
+        get_gfycat_image downloads full resolution images from gfycat.
+
+        Arguments:
+            img_url (string): url of imgur image to download
+            save_dir (string): directory where to save the downloaded image to
+
+        Returns:
+            file_path (string): path to downloaded image or None if no image was downloaded
+        """
         try:
-            gfycat_name = os.path.basename(urllib.parse.urlsplit(img_url).path)
-            gfycat_url = get_gfycat_mp4_download_url(img_url, self.logger)
-        except GfycatClientError as gfycat_error:
+            gfycat_name = os.path.basename(urlsplit(img_url).path)
+            response = requests.get(img_url)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, 'lxml')
+            gfycat_url = ""
+            for tag in soup.find_all("source", src=True):
+                src = tag['src']
+                if "giant" in src and "mp4" in src:
+                    gfycat_url = src
+        except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as gfycat_error:
             self.logger.error('Error downloading Gfycat link: %s', gfycat_error)
             return None
 
