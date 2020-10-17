@@ -181,6 +181,7 @@ class ImgurHelper:
                                         imgur_config['Imgur']['ClientSecret'],
                                         )
         self.gfycat_client = GfycatClient()
+
     def get_imgur_image(self, img_url, save_dir):
         """
         get_imgur_image downloads images from imgur.
