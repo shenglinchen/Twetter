@@ -182,7 +182,7 @@ class LinkedMediaHelper:
                 gfycat_client = GfycatClient(gfycat_client_id, gfycat_client_secret)
 
                 # If this call doesn't work, it'll throw an ImgurClientError
-                gfycat_client.query_gfy('oddyearlyhorsefly-cat-in-bowl')
+                gfycat_client.query_gfy('oddyearlyhorsefly')
                 # It worked, so save the keys to a file
                 gfycat_config = configparser.ConfigParser()
                 gfycat_config['Gfycat'] = {'ClientID': gfycat_client_id,
