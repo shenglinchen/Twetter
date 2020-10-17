@@ -14,7 +14,7 @@ import prawcore.exceptions
 import requests
 from PIL import Image
 from bs4 import BeautifulSoup
-# from gfycat.client import GfycatClient
+from gfycat.client import GfycatClient
 from gfycat.error import GfycatClientError
 from imgurpython import ImgurClient
 from imgurpython.helpers.error import ImgurClientError
@@ -138,16 +138,86 @@ class RedditHelper:
         return posts
 
 
-class ImgurHelper:
+class LinkedMediaHelper:
     """
     ImgurHelper provides methods to collect data / content from Imgur and Gfycat
     """
 
-    def __init__(self, logger, secrets_file='imgur.secret'):
+    def __init__(self, logger, imgur_secrets='imgur.secret', gfycat_secrets='gfycat.secret'):
         self.logger = logger
 
-        # Setup and verify Imgur access
-        if not os.path.exists(secrets_file):
+        imgur_config = self._get_imgur_secrets(imgur_secrets)
+        self.imgur_client = ImgurClient(imgur_config['Imgur']['ClientID'],
+                                        imgur_config['Imgur']['ClientSecret'],
+                                        )
+
+        gfycat_config = self._get_gfycat_secrets(gfycat_secrets)
+        self.gfycat_client = GfycatClient(gfycat_config['Gfycat']['ClientID'],
+                                          gfycat_config['Gfycat']['ClientSecret'],
+                                          )
+
+    def _get_gfycat_secrets(self, gfycat_secrets):
+        """
+        _get_gfycat_secrets checks if the Gfycat api secrets file exists.
+        - If the file exists, this methods reads the the files and returns the secrets in as a dict.
+        - If the file doesn't exist it asks the user over stdin to supply these values and then
+          saves them into the gfycat_secrets file
+
+        Arguments:
+            gfycat_secrets (string): file name of secrets file for API credentials
+
+        Returns:
+            imgur_config (dict): Dictionary containing the client id and client secret needed to
+            login to Gfycat
+        """
+
+        if not os.path.exists(gfycat_secrets):
+            self.logger.warning('Imgur API keys not found. (See wiki if you need help).')
+
+            # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
+            gfycat_client_id = ''.join(input("[ .. ] Enter Gfycat client ID: ").split())
+            gfycat_client_secret = ''.join(input("[ .. ] Enter Gfycat client secret: ").split())
+            # Make sure authentication is working
+            try:
+                gfycat_client = GfycatClient(gfycat_client_id, gfycat_client_secret)
+
+                # If this call doesn't work, it'll throw an ImgurClientError
+                gfycat_client.query_gfy('oddyearlyhorsefly-cat-in-bowl')
+                # It worked, so save the keys to a file
+                gfycat_config = configparser.ConfigParser()
+                gfycat_config['Gfycat'] = {'ClientID': gfycat_client_id,
+                                           'ClientSecret': gfycat_client_secret,
+                                           }
+                with open(gfycat_secrets, 'w') as file:
+                    gfycat_config.write(file)
+                file.close()
+            except GfycatClientError as gfycat_error:
+                self.logger.error('Error while logging into Gfycat: %s', gfycat_error)
+                self.logger.error('Tootbot cannot continue, now shutting down')
+                sys.exit(1)
+        else:
+            # Read API keys from secret file
+            gfycat_config = configparser.ConfigParser()
+            gfycat_config.read(gfycat_secrets)
+
+        return gfycat_config
+
+    def _get_imgur_secrets(self, imgur_secrets):
+        """
+        _get_imgur_secrets checks if the Imgur api secrets file exists.
+        - If the file exists, this methods reads the the files and returns the secrets in as a dict.
+        - If the file doesn't exist it asks the user over stdin to supply these values and then
+          saves them into the imgur_secrets file
+
+        Arguments:
+            imgur_secrets (string): file name of secrets file for API credentials
+
+        Returns:
+            imgur_config (dict): Dictionary containing the client id and client secret needed to
+            login to Imgur
+        """
+
+        if not os.path.exists(imgur_secrets):
             self.logger.warning('Imgur API keys not found. (See wiki if you need help).')
 
             # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
@@ -161,27 +231,22 @@ class ImgurHelper:
                 imgur_client_id.get_album('dqOyj')
                 # It worked, so save the keys to a file
                 imgur_config = configparser.ConfigParser()
-                imgur_config['Imgur'] = {
-                    'ClientID': imgur_client_id,
-                    'ClientSecret': imgur_client_secret
-                }
-                with open(secrets_file, 'w') as file:
+                imgur_config['Imgur'] = {'ClientID': imgur_client_id,
+                                         'ClientSecret': imgur_client_secret,
+                                         }
+                with open(imgur_secrets, 'w') as file:
                     imgur_config.write(file)
                 file.close()
             except ImgurClientError as imgur_error:
-                logger.error('Error while logging into Imgur: %s', imgur_error)
-                logger.error('Tootbot cannot continue, now shutting down')
+                self.logger.error('Error while logging into Imgur: %s', imgur_error)
+                self.logger.error('Tootbot cannot continue, now shutting down')
                 sys.exit(1)
         else:
             # Read API keys from secret file
             imgur_config = configparser.ConfigParser()
-            imgur_config.read(secrets_file)
+            imgur_config.read(imgur_secrets)
 
-        self.imgur_client = ImgurClient(imgur_config['Imgur']['ClientID'],
-                                        imgur_config['Imgur']['ClientSecret'],
-                                        )
-        # self.gfycat_client = GfycatClient()
-        self.gfycat_client = None
+        return imgur_config
 
     def get_imgur_image(self, img_url, save_dir):
         """

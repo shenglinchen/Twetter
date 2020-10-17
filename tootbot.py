@@ -10,7 +10,7 @@ import requests
 import tweepy
 from mastodon import Mastodon, MastodonError
 
-from collect import ImgurHelper
+from collect import LinkedMediaHelper
 from collect import RedditHelper
 from control import PostRecorder
 from getmedia import MediaAttachment
@@ -430,7 +430,7 @@ reddit.allow_nsfw = NSFW_POSTS_ALLOWED
 reddit.allow_self = SELF_POSTS_ALLOWED
 reddit.allow_spoilers = SPOILERS_ALLOWED
 
-imgur = ImgurHelper(logger)
+imgur = LinkedMediaHelper(logger)
 
 mastodon_publisher = MastodonPublisher(mastodon, mastodon_user, logger)
 
