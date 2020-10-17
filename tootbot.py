@@ -21,7 +21,7 @@ from publish import MastodonPublisher
 MAX_LEN_TWEET = 280
 MAX_LEN_TOOT = 500
 CODE_VERSION_MAJOR = 2  # Current major version of this code
-CODE_VERSION_MINOR = 13  # Current minor version of this code
+CODE_VERSION_MINOR = 14  # Current minor version of this code
 
 
 def get_caption(submission, max_len, addhashtags=None):
