@@ -172,7 +172,7 @@ class LinkedMediaHelper:
         """
 
         if not os.path.exists(gfycat_secrets):
-            self.logger.warning('Imgur API keys not found. (See wiki if you need help).')
+            self.logger.warning('Gfycat API keys not found. (See wiki if you need help).')
 
             # Whitespaces are stripped from input: https://stackoverflow.com/a/3739939
             gfycat_client_id = ''.join(input("[ .. ] Enter Gfycat client ID: ").split())
