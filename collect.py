@@ -180,7 +180,8 @@ class ImgurHelper:
         self.imgur_client = ImgurClient(imgur_config['Imgur']['ClientID'],
                                         imgur_config['Imgur']['ClientSecret'],
                                         )
-        self.gfycat_client = GfycatClient()
+        # self.gfycat_client = GfycatClient()
+        self.gfycat_client = None
 
     def get_imgur_image(self, img_url, save_dir):
         """
