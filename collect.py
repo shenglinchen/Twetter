@@ -14,7 +14,7 @@ import prawcore.exceptions
 import requests
 from PIL import Image
 from bs4 import BeautifulSoup
-from gfycat.client import GfycatClient
+# from gfycat.client import GfycatClient
 from gfycat.error import GfycatClientError
 from imgurpython import ImgurClient
 from imgurpython.helpers.error import ImgurClientError
