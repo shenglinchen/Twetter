@@ -4,10 +4,13 @@ to be posted to Mastodon and/or Twitter
 """
 
 import configparser
+import hashlib
 import os
 import re
 import sys
+from urllib.error import URLError
 from urllib.parse import urlsplit
+from urllib.request import urlopen
 
 import praw
 import prawcore.exceptions
@@ -18,6 +21,8 @@ from gfycat.client import GfycatClient
 from gfycat.error import GfycatClientError
 from imgurpython import ImgurClient
 from imgurpython.helpers.error import ImgurClientError
+
+FATAL_TOOTBOT_ERROR = 'Tootbot cannot continue, now shutting down'
 
 
 # Function for downloading images from a URL to media folder
@@ -82,7 +87,7 @@ class RedditHelper:
                 new_reddit_secrets_file.close()
             except prawcore.exceptions.ResponseException as reddit_exception:
                 logger.error('Error while logging into Reddit: %s', reddit_exception)
-                logger.error('Tootbot cannot continue, now shutting down')
+                logger.error(FATAL_TOOTBOT_ERROR)
                 sys.exit(1)
         else:
             # Read API keys from secret file
@@ -143,8 +148,12 @@ class LinkedMediaHelper:
     ImgurHelper provides methods to collect data / content from Imgur and Gfycat
     """
 
-    def __init__(self, logger, imgur_secrets='imgur.secret', gfycat_secrets='gfycat.secret'):
+    def __init__(self, save_dir, logger,
+                 imgur_secrets='imgur.secret',
+                 gfycat_secrets='gfycat.secret',
+                 ):
         self.logger = logger
+        self.save_dir = save_dir
 
         imgur_config = self._get_imgur_secrets(imgur_secrets)
         self.imgur_client = ImgurClient(imgur_config['Imgur']['ClientID'],
@@ -193,7 +202,7 @@ class LinkedMediaHelper:
                 file.close()
             except GfycatClientError as gfycat_error:
                 self.logger.error('Error while logging into Gfycat: %s', gfycat_error)
-                self.logger.error('Tootbot cannot continue, now shutting down')
+                self.logger.error(FATAL_TOOTBOT_ERROR)
                 sys.exit(1)
         else:
             # Read API keys from secret file
@@ -239,7 +248,7 @@ class LinkedMediaHelper:
                 file.close()
             except ImgurClientError as imgur_error:
                 self.logger.error('Error while logging into Imgur: %s', imgur_error)
-                self.logger.error('Tootbot cannot continue, now shutting down')
+                self.logger.error(FATAL_TOOTBOT_ERROR)
                 sys.exit(1)
         else:
             # Read API keys from secret file
@@ -248,13 +257,12 @@ class LinkedMediaHelper:
 
         return imgur_config
 
-    def get_imgur_image(self, img_url, save_dir):
+    def get_imgur_image(self, img_url):
         """
         get_imgur_image downloads images from imgur.
 
         Arguments:
             img_url (string): url of imgur image to download
-            save_dir (string): directory where to save the downloaded image to
 
         Returns:
             file_path (string): path to downloaded image or None if no image was downloaded
@@ -269,12 +277,16 @@ class LinkedMediaHelper:
 
         # Get the Imgur image/gallery ID
         imgur_id = regex_match.group(1)
-        if any(s in img_url for s in ('/a/', '/gallery/')):  # Gallery links
-            images = self.imgur_client.get_album_images(imgur_id)
-            # Only the first image in a gallery is used
-            imgur_url = images[0].link
-        else:  # Single image
-            imgur_url = self.imgur_client.get_image(imgur_id).link
+        try:
+            if any(s in img_url for s in ('/a/', '/gallery/')):  # Gallery links
+                images = self.imgur_client.get_album_images(imgur_id)
+                # Only the first image in a gallery is used
+                imgur_url = images[0].link
+            else:  # Single image
+                imgur_url = self.imgur_client.get_image(imgur_id).link
+        except ImgurClientError as imgur_error:
+            self.logger.error('Could not get information from imgur: %s', imgur_error)
+            return None
 
         # If the URL is a GIFV or MP4 link, change it to the GIF version
         file_extension = os.path.splitext(imgur_url)[-1].lower()
@@ -286,7 +298,7 @@ class LinkedMediaHelper:
             imgur_url = imgur_url.replace('.mp4', '.gif')
 
         # Download the image
-        file_path = save_dir + '/lr_' + imgur_id + file_extension
+        file_path = self.save_dir + '/hr_' + imgur_id + file_extension
         self.logger.info('Downloading Imgur image at URL %s to %s', imgur_url, file_path)
         imgur_file = save_file(imgur_url, file_path, self.logger)
 
@@ -311,53 +323,42 @@ class LinkedMediaHelper:
 
         return imgur_file
 
-    def get_gfycat_image_lowres(self, img_url, save_dir):
-        """
-        get_gfycat_image_lowres downloads low resolution images from gfycat.
-
-        Arguments:
-            img_url (string): url of imgur image to download
-            save_dir (string): directory where to save the downloaded image to
-
-        Returns:
-            file_path (string): path to downloaded image or None if no image was downloaded
-        """
-        try:
-            gfycat_name = os.path.basename(urlsplit(img_url).path)
-            client = self.gfycat_client
-            gfycat_info = client.query_gfy(gfycat_name)
-        except GfycatClientError as gfycat_error:
-            self.logger.error('Error downloading Gfycat link: %s', gfycat_error)
-            return None
-
-        # Download the 2MB version because Tweepy has 3MB upload limit for GIFs
-        gfycat_url = gfycat_info['gfyItem']['max2mbGif']
-        file_path = save_dir + '/lr_' + gfycat_name + '.gif'
-        self.logger.info('Downloading Gfycat at URL %s to %s', gfycat_url, file_path)
-        return save_file(gfycat_url, file_path, self.logger)
-
-    def get_gfycat_image(self, img_url, save_dir):
+    def get_gfycat_image(self, img_url, low_res=False):
         """
         get_gfycat_image downloads full resolution images from gfycat.
 
         Arguments:
-            img_url (string): url of imgur image to download
-            save_dir (string): directory where to save the downloaded image to
+            img_url (string): url of gfycat image to download
+            low_res (boolean): set to True if a low resolution version of the image should be
+                downloaded. If False, full resolution image will be downloaded.
+                Defaults to False
 
         Returns:
             file_path (string): path to downloaded image or None if no image was downloaded
         """
+        gfycat_url = ""
+        file_path = self.save_dir
         try:
-            gfycat_name = os.path.basename(urlsplit(img_url).path)
-            response = requests.get(img_url)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, 'lxml')
-            gfycat_url = ""
-            for tag in soup.find_all("source", src=True):
-                src = tag['src']
-                if "giant" in src and "mp4" in src:
-                    gfycat_url = src
-        except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as gfycat_error:
+            if low_res:
+                gfycat_name = os.path.basename(urlsplit(img_url).path)
+                client = self.gfycat_client
+                gfycat_info = client.query_gfy(gfycat_name)
+                gfycat_url = gfycat_info['gfyItem']['max2mbGif']
+                file_path += gfycat_name + '.gif'
+            else:
+                gfycat_name = os.path.basename(urlsplit(img_url).path)
+                response = requests.get(img_url)
+                response.raise_for_status()
+                soup = BeautifulSoup(response.text, 'lxml')
+                for tag in soup.find_all("source", src=True):
+                    src = tag['src']
+                    if "giant" in src and "mp4" in src:
+                        gfycat_url = src
+                file_path += gfycat_name + '.mp4'
+        except (requests.ConnectionError,
+                requests.Timeout,
+                requests.HTTPError,
+                GfycatClientError) as gfycat_error:
             self.logger.error('Error downloading Gfycat link: %s', gfycat_error)
             return None
 
@@ -365,6 +366,214 @@ class LinkedMediaHelper:
             self.logger.debug('Empty Gfycat URL; no attachment to download')
             return None
 
-        file_path = save_dir + '/hr_' + gfycat_name + '.mp4'
         self.logger.info('Downloading Gfycat at URL %s to %s', gfycat_url, file_path)
         return save_file(gfycat_url, file_path, self.logger)
+
+    def get_reddit_image(self, img_url):
+        """
+        get_reddit_image downloads full resolution images from i.reddit or reddituploads.
+
+        Arguments:
+            img_url (string): url of imgur image to download
+
+        Returns:
+            file_path (string): path to downloaded image or None if no image was downloaded
+        """
+        file_name = os.path.basename(urlsplit(img_url).path)
+        file_extension = os.path.splitext(img_url)[-2].lower()
+        # Fix for issue with i.reddituploads.com links not having a
+        # file extension in the URL
+        if not file_extension:
+            file_extension += '.jpg'
+            file_name += '.jpg'
+            img_url += '.jpg'
+        # Download the file
+        file_path = self.save_dir + '/' + file_name
+        self.logger.info('Downloading file at URL %s to %s, file type identified as %s',
+                         img_url,
+                         file_path,
+                         file_extension,
+                         )
+        return save_file(img_url, file_path, self.logger)
+
+    def get_reddit_video(self, reddit_post):
+        """
+        get_reddit_video downloads full resolution video from i.reddit or reddituploads.
+
+        Arguments:
+            reddit_post (reddit_post): reddit post / submission object
+
+        Returns:
+            file_path (string): path to downloaded video or None if no image was downloaded
+        """
+        # Get URL for MP4 version of reddit video
+        video_url = reddit_post.media['reddit_video']['fallback_url']
+        file_path = self.save_dir + '/hr_' + reddit_post.id + '.mp4'
+        self.logger.info('Downloading Reddit video at URL %s to %s', video_url, file_path)
+        return save_file(video_url, file_path, self.logger)
+
+    def get_giphy_image(self, img_url, lowres=False):
+        """
+        get_giphy_image downloads full or low resolution image from giphy
+
+        Arguments:
+            img_url (string): url of giphy image to download
+            lowres (boolean): set to True if a low resolution version of the image should be
+                downloaded. If False, full resolution image will be downloaded.
+                Defaults to False
+
+        Returns:
+            file_path (string): path to downloaded image or None if no image was downloaded
+        """
+        # Working demo of regex: https://regex101.com/r/o8m1kA/2
+        regex = r"https?://((?:.*)giphy\.com/media/|giphy.com/gifs/|i.giphy.com/)(.*-)?(\w+)(/|\n)"
+        match = re.search(regex, img_url, flags=0)
+        if not match:
+            self.logger.error('Could not identify Giphy ID in this URL: %s', img_url)
+            return None
+
+        # Get the Giphy ID
+        giphy_id = match.group(3)
+        if lowres:
+            giphy_url = 'https://media.giphy.com/media/' + giphy_id + '/giphy-downsized.gif'
+            file_path = self.save_dir + '/lr_' + giphy_id + '-downsized.gif'
+            self.logger.info('Downloading Giphy at %s to %s', giphy_url, file_path)
+            giphy_file = save_file(giphy_url, file_path, self.logger)
+            # Check the hash to make sure it's not a GIF saying
+            # "This content is not available"
+            # More info: https://github.com/corbindavenport/tootbot/issues/8
+            image_hash = hashlib.md5(open(giphy_file, 'rb').read()).hexdigest()
+            if image_hash == '59a41d58693283c72d9da8ae0561e4e5':
+                self.logger.warn('Giphy: no 2MB GIF version, not posted to Twitter')
+                giphy_file = None
+        else:
+            # Download the MP4 version of the GIF
+            giphy_url = 'https://media.giphy.com/media/' + giphy_id + '/giphy.mp4'
+            file_path = self.save_dir + '/hr_' + giphy_id + 'giphy.mp4'
+            giphy_file = save_file(giphy_url, file_path, self.logger)
+            self.logger.info('Downloading Giphy at URL %s to %s', giphy_url, file_path)
+
+        return giphy_file
+
+    def get_generic_image(self, img_url):
+        """
+        get_generic_image downloads image or video from a generic url to a media file.
+
+        Arguments:
+            img_url (string): url to image or video file
+
+        Returns:
+            file_path (string): path to downloaded video or None if no image was downloaded
+        """
+        # Check if URL is an image or MP4 file, based on the MIME type
+        image_formats = ('image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4')
+        try:
+            img_site = urlopen(img_url)
+        except URLError as url_error:
+            self.logger.error('Error whole opening URL %s', url_error)
+            return None
+
+        meta = img_site.info()
+        if meta["content-type"] not in image_formats:
+            self.logger.error('URL does not point to a valid image file.')
+            return None
+
+        # URL appears to be an image, so download it
+        file_name = os.path.basename(urlsplit(img_url).path)
+        file_path = self.save_dir + '/' + file_name
+        self.logger.info('Downloading file at URL %s to %s', img_url, file_path)
+        return save_file(img_url, file_path, self.logger)
+
+
+class MediaAttachment:
+    '''
+    MediaAttachment contains code to retrieve the appriopriate images or videos to include in a
+    s reddit post to be shared on Mastodon or Twitter
+    '''
+    LOW_RES = 1
+    HIGH_RES = 2
+    HIGH_AND_LOW_RES = 3
+
+    def __init__(self, reddit_post, image_helper, download_for, logger):
+
+        self.media_path_low_res = None
+        self.media_path_high_res = None
+        self.reddit_post = reddit_post
+        self.media_url = self.reddit_post.url
+        self.image_helper = image_helper
+        self.logger = logger
+
+        if download_for in [self.LOW_RES, self.HIGH_AND_LOW_RES]:
+            self.media_path_low_res = self._get_media(low_res=True)
+
+        if download_for in [self.HIGH_RES, self.HIGH_AND_LOW_RES]:
+            self.media_path_high_res = self._get_media()
+
+        sha256 = hashlib.sha256()
+        if self.media_path_low_res is not None:
+            with open(self.media_path_low_res, "rb") as media_file:
+                # Read and update hash string value in blocks of 4K
+                for byte_block in iter(lambda: media_file.read(4096), b""):
+                    sha256.update(byte_block)
+        self.check_sum_low_res = sha256.hexdigest()
+
+        sha256 = hashlib.sha256()
+        if self.media_path_high_res is not None:
+            with open(self.media_path_high_res, "rb") as media_file:
+                # Read and update hash string value in blocks of 4K
+                for byte_block in iter(lambda: media_file.read(4096), b""):
+                    sha256.update(byte_block)
+        self.check_sum_high_res = sha256.hexdigest()
+
+    def destroy(self):
+        '''
+        Removes any files downloaded and clears out the object attributes.
+        '''
+        try:
+            if self.media_path_high_res is not None:
+                os.remove(self.media_path_high_res)
+                self.logger.info('Deleted media file at %s', self.media_path_high_res)
+            if self.media_path_low_res is not None:
+                os.remove(self.media_path_low_res)
+                self.logger.info('Deleted media file at %s', self.media_path_low_res)
+        except OSError as delete_error:
+            self.logger.error('Error while deleting media file: %s', delete_error)
+
+        self.media_path_high_res = None
+        self.media_path_low_res = None
+        self.media_url = None
+        self.check_sum_high_res = None
+
+    # Function for obtaining static images and GIFs from popular image hosts
+    def _get_media(self, low_res=False):
+        if not os.path.exists(self.image_helper.save_dir):
+            os.makedirs(self.image_helper.save_dir)
+            self.logger.info('Media folder not found, created new folder: %s',
+                             self.image_helper.save_dir)
+
+        file_path = None
+
+        # Download and save the linked image
+        if any(s in self.media_url for s in ('i.redd.it', 'i.reddituploads.com')):  # Reddit-hosted
+            file_path = self.image_helper.get_reddit_image(self.media_url)
+
+        elif 'v.redd.it' in self.media_url and low_res:  # Reddit video
+            self.logger.warn('Videos can not be uploaded to Twitter, due to API limitations')
+        elif 'v.redd.it' in self.media_url and not self.reddit_post.media:  # Reddit video
+            self.logger.error('Reddit API returned no media for this URL: %s', self.media_url)
+        elif 'v.redd.it' in self.media_url:
+            file_path = self.image_helper.get_reddit_video(self.reddit_post)
+
+        elif 'imgur.com' in self.media_url:
+            file_path = self.image_helper.get_imgur_image(self.media_url)
+
+        elif 'gfycat.com' in self.media_url:  # Gfycat
+            file_path = self.image_helper.get_gfycat_image_lowres(self.media_url)
+
+        elif 'giphy.com' in self.media_url:  # Giphy
+            file_path = self.image_helper.get_giphy_image(self.media_url, lowres=True)
+
+        else:
+            file_path = self.image_helper.get_generic_image(self.media_url)
+
+        return file_path

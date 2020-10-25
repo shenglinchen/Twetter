@@ -11,17 +11,16 @@ import tweepy
 from mastodon import Mastodon, MastodonError
 
 from collect import LinkedMediaHelper
+from collect import MediaAttachment
 from collect import RedditHelper
 from control import PostRecorder
-from getmedia import MediaAttachment
-from getmedia import get_media
 from monitoring import HealthChecks
 from publish import MastodonPublisher
 
 MAX_LEN_TWEET = 280
 MAX_LEN_TOOT = 500
 CODE_VERSION_MAJOR = 2  # Current major version of this code
-CODE_VERSION_MINOR = 14  # Current minor version of this code
+CODE_VERSION_MINOR = 15  # Current minor version of this code
 
 
 def get_caption(submission, max_len, addhashtags=None):
@@ -54,7 +53,7 @@ def get_caption(submission, max_len, addhashtags=None):
     return caption
 
 
-def make_post(posts, duplicate_checker, imgur_helper):
+def make_post(posts, duplicate_checker, media_helper):
     global NUM_NON_PROMO_MESSAGES
     break_to_mainloop = False
     for additional_hashtags, source_posts in posts.items():
@@ -72,10 +71,14 @@ def make_post(posts, duplicate_checker, imgur_helper):
                 if POST_TO_TWITTER:
                     # Download Twitter-compatible version of media file
                     # (static image or GIF under 3MB)
-                    media_file = get_media(shared_url, imgur_helper, IMAGE_DIR, logger)
+                    media_attachment = MediaAttachment(source_posts[post],
+                                                       media_helper,
+                                                       MediaAttachment.LOW_RES,
+                                                       logger,
+                                                       )
                     # Make sure the post contains media,
                     # if MEDIA_POSTS_ONLY in config is set to True
-                    if (((MEDIA_POSTS_ONLY is True) and media_file) or
+                    if (((MEDIA_POSTS_ONLY is True) and media_attachment.media_path_low_res) or
                             (MEDIA_POSTS_ONLY is False)):
                         try:
                             twitter_auth = tweepy.OAuthHandler(CONSUMER_KEY,
@@ -88,32 +91,35 @@ def make_post(posts, duplicate_checker, imgur_helper):
                             caption = get_caption(source_posts[post], MAX_LEN_TWEET,
                                                   addhashtags=additional_hashtags)
                             # Post the tweet
-                            if media_file:
+                            if media_attachment.media_path_low_res:
                                 logger.info('Posting this on Twitter with media %s', caption)
-                                tweet = twitter_api.update_with_media(filename=media_file,
-                                                                      status=caption)
-                                # Clean up media file
-                                try:
-                                    os.remove(media_file)
-                                    logger.info('Deleted media file at %s', media_file)
-                                except BaseException as e:
-                                    logger.error('Error while deleting media file: %s', e)
+                                tweet = twitter_api.update_with_media(
+                                    filename=media_attachment.media_path_low_res,
+                                    status=caption)
+
+                                duplicate_checker.log_post(post_id,
+                                                           'https://twitter.com/' +
+                                                           twitter_username + '/status/'
+                                                           + tweet.id_str + '/',
+                                                           shared_url,
+                                                           media_attachment.check_sum_low_res,
+                                                           )
+                                media_attachment.destroy()
                             else:
                                 logger.info('Posting this on Twitter: %s', caption)
                                 tweet = twitter_api.update_status(status=caption)
+                                duplicate_checker.log_post(post_id,
+                                                           'https://twitter.com/' +
+                                                           twitter_username + '/status/'
+                                                           + tweet.id_str + '/',
+                                                           shared_url,
+                                                           '',
+                                                           )
                             # Log the tweet
-                            duplicate_checker.log_post(
-                                post_id, 'https://twitter.com/' +
-                                         twitter_username + '/status/' + tweet.id_str + '/',
-                                shared_url,
-                                '')
                         except BaseException as e:
                             logger.error('Error while posting tweet: %s', e)
-                            # Log the post anyways
-                            duplicate_checker.log_post(post_id, 'Error while posting tweet: %s' % e,
-                                                       '',
-                                                       '')
-                    else:
+                            duplicate_checker.log_post(post_id, 'Error wile posting tweet: %s' % e,
+                                                       '', '')
                         logger.warning(
                             'Twitter: Skipping %s because non-media posts are disabled or the media file was not found',
                             post_id)
@@ -129,8 +135,7 @@ def make_post(posts, duplicate_checker, imgur_helper):
                 if MASTODON_INSTANCE_DOMAIN:
 
                     attachment = MediaAttachment(source_posts[post],
-                                                 imgur_helper,
-                                                 IMAGE_DIR,
+                                                 media_helper,
                                                  MediaAttachment.HIGH_RES,
                                                  logger
                                                  )
@@ -210,16 +215,15 @@ def make_post(posts, duplicate_checker, imgur_helper):
                 break_to_mainloop = True
                 break
 
-            else:
-                logger.info('Skipping %s because it was already posted', post_id)
+            logger.info('Skipping %s because it was already posted', post_id)
 
 
 # Make sure config file exists
 try:
     config = configparser.ConfigParser()
     config.read('config.ini')
-except BaseException as me:
-    print('[ERROR] Error while reading config file: %s' % me)
+except configparser.Error as config_error:
+    print('[ERROR] Error while reading config file: %s', config_error)
     sys.exit()
 
 LOG_LEVEL = 'INFO'
@@ -257,11 +261,11 @@ else:
 PROMO_EVERY = int(config['PromoSettings']['PromoEvery'])
 PROMO_MESSAGE = config['PromoSettings']['PromoMessage']
 # HealthChecks related settings
-do_healthchecks = False
+DO_HEALTHCHECKS = False
 hc_base_url = config['HealthChecks']['BaseUrl']
 hc_uid = config['HealthChecks']['UID']
 if len(hc_base_url) > 0:
-    do_healthchecks = True
+    DO_HEALTHCHECKS = True
 # Settings related to media attachments
 MEDIA_POSTS_ONLY = bool(
     distutils.util.strtobool(config['MediaSettings']['MediaPostsOnly']))
@@ -294,8 +298,8 @@ try:
                        CODE_VERSION_MINOR)
         logger.warning('Get the latest update from here: https://gitlab.com/marvin8/tootbot/')
 except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
-        requests.exceptions.HTTPError) as re:
-    logger.error('while checking for updates we got this error: %s', re)
+        requests.exceptions.HTTPError) as update_check_error:
+    logger.error('while checking for updates we got this error: %s', update_check_error)
 
 # Log into Twitter if enabled in settings
 if POST_TO_TWITTER is True:
@@ -314,10 +318,10 @@ if POST_TO_TWITTER is True:
             twitter = tweepy.API(test_twitter_auth)
             twitter_username = twitter.me().screen_name
             logger.info('Successfully authenticated on Twitter as @%s', twitter_username)
-        except BaseException as me:
-            logger.error('Error while logging into Twitter: %s', me)
+        except BaseException as mastodon_error:
+            logger.error('Error while logging into Twitter: %s', mastodon_error)
             logger.error('Tootbot cannot continue, now shutting down')
-            exit()
+            sys.exit(1)
     else:
         # If the secret file doesn't exist, it means the setup process
         # hasn't happened yet
@@ -349,10 +353,10 @@ if POST_TO_TWITTER is True:
             with open('twitter.secret', 'w') as f:
                 twitter_config.write(f)
             f.close()
-        except BaseException as me:
-            logger.error('Error while logging into Twitter: %s', me)
+        except BaseException as mastodon_error:
+            logger.error('Error while logging into Twitter: %s', mastodon_error)
             logger.error('Tootbot cannot continue, now shutting down')
-            exit()
+            sys.exit(1)
 # Log into Mastodon if enabled in settings
 if MASTODON_INSTANCE_DOMAIN:
     if not os.path.exists('mastodon.secret'):
@@ -382,10 +386,10 @@ if MASTODON_INSTANCE_DOMAIN:
             logger.info(
                 'Successfully authenticated on %s as @%s login information now stored in mastodon.secret file',
                 MASTODON_INSTANCE_DOMAIN, mastodon_username)
-        except MastodonError as me:
-            logger.error('Error while logging into Mastodon: %s', me)
+        except MastodonError as mastodon_error:
+            logger.error('Error while logging into Mastodon: %s', mastodon_error)
             logger.error('Tootbot cannot continue, now shutting down')
-            exit()
+            sys.exit(1)
     else:
         try:
             mastodon = Mastodon(access_token='mastodon.secret',
@@ -396,10 +400,10 @@ if MASTODON_INSTANCE_DOMAIN:
             mastodon_username = mastodon_user['username']
             logger.info('Successfully authenticated on %s as @%s', MASTODON_INSTANCE_DOMAIN,
                         mastodon_username)
-        except MastodonError as me:
-            logger.error('Error while logging into Mastodon: %s', me)
+        except MastodonError as mastodon_error:
+            logger.error('Error while logging into Mastodon: %s', mastodon_error)
             logger.error('Tootbot cannot continue, now shutting down')
-            exit()
+            sys.exit(1)
 # Set the command line window title on Windows
 if os.name == 'nt':
     try:
@@ -430,14 +434,14 @@ reddit.allow_nsfw = NSFW_POSTS_ALLOWED
 reddit.allow_self = SELF_POSTS_ALLOWED
 reddit.allow_spoilers = SPOILERS_ALLOWED
 
-imgur = LinkedMediaHelper(logger)
+imgur = LinkedMediaHelper(IMAGE_DIR, logger)
 
 mastodon_publisher = MastodonPublisher(mastodon, mastodon_user, logger)
 
 # Run the main script
 NUM_NON_PROMO_MESSAGES = 0  # type: int
 while True:
-    if do_healthchecks:
+    if DO_HEALTHCHECKS:
         healthcheck.check_start()
 
     reddit_posts = {}
@@ -451,7 +455,7 @@ while True:
     else:
         logger.info('Deleting old toots disabled')
 
-    if do_healthchecks:
+    if DO_HEALTHCHECKS:
         healthcheck.check_ok()
 
     if RUN_ONCE_ONLY:
