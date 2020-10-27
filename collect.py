@@ -155,15 +155,25 @@ class LinkedMediaHelper:
         self.logger = logger
         self.save_dir = save_dir
 
-        imgur_config = self._get_imgur_secrets(imgur_secrets)
-        self.imgur_client = ImgurClient(imgur_config['Imgur']['ClientID'],
-                                        imgur_config['Imgur']['ClientSecret'],
-                                        )
+        try:
+            imgur_config = self._get_imgur_secrets(imgur_secrets)
+            self.imgur_client = ImgurClient(imgur_config['Imgur']['ClientID'],
+                                            imgur_config['Imgur']['ClientSecret'],
+                                            )
 
-        gfycat_config = self._get_gfycat_secrets(gfycat_secrets)
-        self.gfycat_client = GfycatClient(gfycat_config['Gfycat']['ClientID'],
-                                          gfycat_config['Gfycat']['ClientSecret'],
-                                          )
+            gfycat_config = self._get_gfycat_secrets(gfycat_secrets)
+            self.gfycat_client = GfycatClient(gfycat_config['Gfycat']['ClientID'],
+                                              gfycat_config['Gfycat']['ClientSecret'],
+                                              )
+
+        except ImgurClientError as imgur_error:
+            self.logger.error('Error on creating ImgurClient: %s', imgur_error)
+            self.logger.error(FATAL_TOOTBOT_ERROR)
+            sys.exit(1)
+        except GfycatClientError as gfycat_error:
+            self.logger.error('Error on creating GfycatClient: %s', gfycat_error)
+            self.logger.error(FATAL_TOOTBOT_ERROR)
+            sys.exit(1)
 
     def _get_gfycat_secrets(self, gfycat_secrets):
         """
@@ -337,7 +347,7 @@ class LinkedMediaHelper:
             file_path (string): path to downloaded image or None if no image was downloaded
         """
         gfycat_url = ""
-        file_path = self.save_dir
+        file_path = self.save_dir + '/'
         try:
             if low_res:
                 gfycat_name = os.path.basename(urlsplit(img_url).path)
@@ -412,13 +422,13 @@ class LinkedMediaHelper:
         self.logger.info('Downloading Reddit video at URL %s to %s', video_url, file_path)
         return save_file(video_url, file_path, self.logger)
 
-    def get_giphy_image(self, img_url, lowres=False):
+    def get_giphy_image(self, img_url, low_res=False):
         """
         get_giphy_image downloads full or low resolution image from giphy
 
         Arguments:
             img_url (string): url of giphy image to download
-            lowres (boolean): set to True if a low resolution version of the image should be
+            low_res (boolean): set to True if a low resolution version of the image should be
                 downloaded. If False, full resolution image will be downloaded.
                 Defaults to False
 
@@ -434,7 +444,7 @@ class LinkedMediaHelper:
 
         # Get the Giphy ID
         giphy_id = match.group(3)
-        if lowres:
+        if low_res:
             giphy_url = 'https://media.giphy.com/media/' + giphy_id + '/giphy-downsized.gif'
             file_path = self.save_dir + '/lr_' + giphy_id + '-downsized.gif'
             self.logger.info('Downloading Giphy at %s to %s', giphy_url, file_path)
@@ -465,12 +475,19 @@ class LinkedMediaHelper:
         Returns:
             file_path (string): path to downloaded video or None if no image was downloaded
         """
+        # First check if URL is reference to another reddit post (i.e. a cross-post)
+        regex = r"^/r/.*"
+        match = re.search(regex, img_url, flags=0)
+        if match:
+            self.logger.info('Post links to another reddit submission, i.e. is a cross-post')
+            return None
+
         # Check if URL is an image or MP4 file, based on the MIME type
         image_formats = ('image/png', 'image/jpeg', 'image/gif', 'image/webp', 'video/mp4')
         try:
             img_site = urlopen(img_url)
-        except URLError as url_error:
-            self.logger.error('Error whole opening URL %s', url_error)
+        except (URLError, UnicodeEncodeError) as url_error:
+            self.logger.error('Error while opening URL %s', url_error)
             return None
 
         meta = img_site.info()
@@ -486,10 +503,10 @@ class LinkedMediaHelper:
 
 
 class MediaAttachment:
-    '''
-    MediaAttachment contains code to retrieve the appriopriate images or videos to include in a
+    """
+    MediaAttachment contains code to retrieve the appropriate images or videos to include in a
     s reddit post to be shared on Mastodon or Twitter
-    '''
+    """
     LOW_RES = 1
     HIGH_RES = 2
     HIGH_AND_LOW_RES = 3
@@ -526,9 +543,9 @@ class MediaAttachment:
         self.check_sum_high_res = sha256.hexdigest()
 
     def destroy(self):
-        '''
+        """
         Removes any files downloaded and clears out the object attributes.
-        '''
+        """
         try:
             if self.media_path_high_res is not None:
                 os.remove(self.media_path_high_res)
@@ -568,10 +585,10 @@ class MediaAttachment:
             file_path = self.image_helper.get_imgur_image(self.media_url)
 
         elif 'gfycat.com' in self.media_url:  # Gfycat
-            file_path = self.image_helper.get_gfycat_image_lowres(self.media_url)
+            file_path = self.image_helper.get_gfycat_image(self.media_url, low_res=low_res)
 
         elif 'giphy.com' in self.media_url:  # Giphy
-            file_path = self.image_helper.get_giphy_image(self.media_url, lowres=True)
+            file_path = self.image_helper.get_giphy_image(self.media_url, low_res=low_res)
 
         else:
             file_path = self.image_helper.get_generic_image(self.media_url)

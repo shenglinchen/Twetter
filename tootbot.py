@@ -7,6 +7,7 @@ import time
 
 import coloredlogs
 import requests
+from requests.exceptions import ConnectionError, HTTPError, Timeout
 import tweepy
 from mastodon import Mastodon, MastodonError
 
@@ -21,6 +22,7 @@ MAX_LEN_TWEET = 280
 MAX_LEN_TOOT = 500
 CODE_VERSION_MAJOR = 2  # Current major version of this code
 CODE_VERSION_MINOR = 15  # Current minor version of this code
+CODE_VERSION_PATCH = 1  # Current patch version of this code
 
 
 def get_caption(submission, max_len, addhashtags=None):
@@ -284,22 +286,29 @@ SUBREDDITS = config.items('Subreddits')
 # Check for updates
 try:
     response = requests.get(
-        'https://gitlab.com/marvin8/tootbot/-/raw/main/update-check/current-version.txt')
+        'https://gitlab.com/marvin8/tootbot/-/raw/main/update-check/release-version.txt')
     response.raise_for_status()
     repo_version = response.content.decode('utf-8').strip().partition('.')
     repo_version_major = int(repo_version[0].strip())
-    repo_version_minor = int(repo_version[2].strip())
-    if CODE_VERSION_MAJOR >= repo_version_major and CODE_VERSION_MINOR >= repo_version_minor:
-        logger.info('You have the latest version of Tootbot (%s.%s)', CODE_VERSION_MAJOR,
-                    CODE_VERSION_MINOR)
+    repo_minor_version_to_check = repo_version[2].strip().partition('.')
+    if repo_minor_version_to_check[1] == '':
+        repo_version_minor = int(repo_minor_version_to_check[0].strip())
+        repo_version_patch = 0
     else:
-        logger.warning('A new version of Tootbot (%s.%s) is available! (you have %s.%s)',
-                       repo_version_major, repo_version_minor, CODE_VERSION_MAJOR,
-                       CODE_VERSION_MINOR)
+        repo_version_minor = int(repo_minor_version_to_check[0].strip())
+        repo_version_patch = int(repo_minor_version_to_check[2].strip())
+    if CODE_VERSION_MAJOR >= repo_version_major and \
+            CODE_VERSION_MINOR >= repo_version_minor and \
+            CODE_VERSION_PATCH >= repo_version_patch:
+        logger.info('You have the latest version of Tootbot (%s.%s.%s)', CODE_VERSION_MAJOR,
+                    CODE_VERSION_MINOR, CODE_VERSION_PATCH)
+    else:
+        logger.warning('A new version of Tootbot (%s.%s.%s) is available! (you have %s.%s.%s)',
+                       repo_version_major, repo_version_minor, repo_version_patch,
+                       CODE_VERSION_MAJOR, CODE_VERSION_MINOR, CODE_VERSION_PATCH)
         logger.warning('Get the latest update from here: https://gitlab.com/marvin8/tootbot/')
-except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
-        requests.exceptions.HTTPError) as update_check_error:
-    logger.error('while checking for updates we got this error: %s', update_check_error)
+except (ConnectionError, Timeout, HTTPError) as update_check_error:
+    logger.info('while checking for updates we got this error: %s', update_check_error)
 
 # Log into Twitter if enabled in settings
 if POST_TO_TWITTER is True:
