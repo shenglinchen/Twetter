@@ -7,9 +7,9 @@ import time
 
 import coloredlogs
 import requests
-from requests.exceptions import ConnectionError, HTTPError, Timeout
 import tweepy
 from mastodon import Mastodon, MastodonError
+from requests.exceptions import ConnectionError, HTTPError, Timeout
 
 from collect import LinkedMediaHelper
 from collect import MediaAttachment
@@ -22,7 +22,7 @@ MAX_LEN_TWEET = 280
 MAX_LEN_TOOT = 500
 CODE_VERSION_MAJOR = 2  # Current major version of this code
 CODE_VERSION_MINOR = 15  # Current minor version of this code
-CODE_VERSION_PATCH = 1  # Current patch version of this code
+CODE_VERSION_PATCH = 2  # Current patch version of this code
 
 
 def get_caption(submission, max_len, addhashtags=None):
@@ -141,9 +141,11 @@ def make_post(posts, duplicate_checker, media_helper):
                                                  MediaAttachment.HIGH_RES,
                                                  logger
                                                  )
+                    logger.debug('Attachement media_path ->%s<-', attachment.media_path_high_res)
 
                     # Check for duplicate of attachment sha256
-                    if duplicate_checker.duplicate_check(attachment.check_sum_high_res):
+                    if attachment.media_path_high_res and \
+                            duplicate_checker.duplicate_check(attachment.check_sum_high_res):
                         logger.info(
                             'Skipping %s because attachment with hash %s has already been posted',
                             post_id, attachment.check_sum_high_res)
@@ -153,6 +155,8 @@ def make_post(posts, duplicate_checker, media_helper):
                                                    attachment.check_sum_high_res)
                         attachment.destroy()
                         continue
+
+                    logger.debug('MEDIA_POSTS_ONLY: %s', MEDIA_POSTS_ONLY)
 
                     # Make sure the post contains media,
                     # if MEDIA_POSTS_ONLY in config is set to True
