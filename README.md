@@ -1,25 +1,23 @@
 # Tootbot
 
-This is a Python bot that looks up posts from specified subreddits and automatically posts them on Twitter and/or 
+This is a Python bot that looks up posts from specified subreddits and automatically posts them on 
 [Mastodon](https://joinmastodon.org/). It is based on 
 [reddit-twitter-bot](https://github.com/rhiever/reddit-twitter-bot). Tootbot is now used by 
 [a wide variety of social media accounts](https://github.com/corbindavenport/tootbot/wiki/Accounts-using-Tootbot).
 
 ---
 
-**!!! Please be aware that I am not overly confident in the Twitter related code.  !!!** 
-
-Posting to Twitter seems to be working at this time, but as II haven't been able to get a Twitter developer account, 
-I haven't been able to properly test the Twitter related code in Tootbot. Twitter has stopped responding to me :(  
-You can follow [Issue 3](https://gitlab.com/marvin8/tootbot/-/issues/3) in this repo for more info around Twitter..
-
+**!!! This version of Tootbot no longer supports posting to Twitter. !!!**    
+If you need twitter functionality follow v2.x.x branch on this project or look into
+[reddit-twitter-bot](https://github.com/rhiever/reddit-twitter-bot) as a possible alternative.
 
 ---
 
 **Features:**
 
-* Tootbot can post to both Twitter and [Mastodon](https://joinmastodon.org/)
-* Media from direct links, Gfycat, Imgur, Reddit, and Giphy is automatically attached in the social media post
+* Tootbot posts to [Mastodon](https://joinmastodon.org/)
+* Media from direct links, Gfycat, Imgur, Reddit, and Giphy is automatically attached in the social media post.
+  Tootbot attaches up to the first 4 pictures for imgur albums and reddit gallery posts.
 * Links that do not contain media can be skipped, ideal for meme accounts like 
   [@badreactiongifs](https://twitter.com/badreactiongifs)
 * NSFW content, spoilers, and self-posts can be filtered
@@ -28,10 +26,10 @@ You can follow [Issue 3](https://gitlab.com/marvin8/tootbot/-/issues/3) in this 
 * Tootbot also checks the sha256 checksum of media files to stop posting of the same media file from different subreddits.
 * Tootbot can ping a [Healthchecks](https://healthchecks.io/) instance for monitoring continuous operation of Tootbot
 * Optionally delete older Mastodon toots older than a configurable number of days.
+* Optionally throttle down frequency of tooting when mastodon errors are detected.
 
 Tootbot uses the 
-[arrow](https://arrow.readthedocs.io/en/stable/)
-[tweepy](https://github.com/tweepy/tweepy), 
+[arrow](https://arrow.readthedocs.io/en/stable/),
 [PRAW](https://praw.readthedocs.io/en/latest/), prawcore,
 [py-gfycat](https://github.com/ankeshanand/py-gfycat),
 [imgurpython](https://github.com/Imgur/imgurpython), 
