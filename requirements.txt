@@ -1,4 +1,3 @@
-tweepy
 praw
 gfycat
 imgurpython

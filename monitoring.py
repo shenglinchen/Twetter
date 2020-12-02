@@ -3,18 +3,20 @@ Classes / Methods to assist with monitoring continued operation of tootboot.
 """
 import requests
 
+from control import Configuration
+
 
 class HealthChecks:
     """
     Class to make monitoring the operation of tootboot with Healthchecks (healthchecks.io) easier.
     """
 
-    def __init__(self, base_url, uid, logger=None):
-        self.base_url = base_url
-        self.uid = uid
-        self.logger = logger
+    def __init__(self, config: Configuration) -> None:
+        self.base_url = config.health.base_url
+        self.uid = config.health.uuid
+        self.logger = config.bot.logger
 
-    def check(self, data=None, check_type=None):
+    def check(self, data: str = None, check_type: str = None) -> None:
         """
         Check in with a Healthchecks installation
 
@@ -44,19 +46,19 @@ class HealthChecks:
             if self.logger is not None:
                 self.logger.error('During Monitoring "OK Ping" we got: %s' % requests_exception)
 
-    def check_ok(self, data=None):
+    def check_ok(self, data: str = None) -> None:
         """
         Convenience method to signal an OK completion of a process.
         """
         self.check(data=data)
 
-    def check_start(self, data=None):
+    def check_start(self, data: str = None) -> None:
         """
         Convenience method to signal the start of a process
         """
         self.check(data=data, check_type='start')
 
-    def check_fail(self, data=None):
+    def check_fail(self, data: str = None) -> None:
         """
         Convenience method to signal the failure of a process
         """
