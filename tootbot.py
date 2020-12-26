@@ -15,7 +15,7 @@ from publish import MastodonPublisher
 
 CODE_VERSION_MAJOR = 3  # Current major version of this code
 CODE_VERSION_MINOR = 0  # Current minor version of this code
-CODE_VERSION_PATCH = 1  # Current patch version of this code
+CODE_VERSION_PATCH = 2  # Current patch version of this code
 
 config = Configuration()
 
@@ -76,7 +76,8 @@ while True:
 
     reddit_posts = {}
     for subreddit in config.subreddits:
-        reddit_posts[subreddit.tags] = reddit.get_reddit_posts(subreddit.name)
+        reddit_posts[subreddit.tags] = reddit.get_reddit_posts(subreddit.name,
+                                                               limit=config.reddit.post_limit)
     mastodon_publisher.make_post(reddit_posts, reddit, media_helper)
 
     if config.mastodon_config.delete_after > 0:
