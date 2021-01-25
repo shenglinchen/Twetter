@@ -227,7 +227,7 @@ class Configuration:
         logger.debug('Healthcheck settings: %s', healthchecks_settings)
         logger.debug('Base_url ->%s<-', healthchecks_settings['BaseUrl'])
         logger.debug('Len base url: %s', len(healthchecks_settings['BaseUrl']))
-        if len(healthchecks_settings['BaseUrl']) > -1:
+        if len(healthchecks_settings['BaseUrl']) > 0:
             health_enabled = True
         self.health = HealthCheckConfig(enabled=health_enabled,
                                         base_url=healthchecks_settings['BaseUrl'],
