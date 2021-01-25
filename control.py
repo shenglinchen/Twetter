@@ -224,7 +224,7 @@ class Configuration:
         # HealthChecks related settings
         healthchecks_settings = config['HealthChecks']
         health_enabled = False
-        if len(healthchecks_settings['BaseUrl']) > -1:
+        if len(healthchecks_settings['BaseUrl']) > 0:
             health_enabled = True
         self.health = HealthCheckConfig(enabled=health_enabled,
                                         base_url=healthchecks_settings['BaseUrl'],
