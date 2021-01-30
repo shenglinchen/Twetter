@@ -1,10 +1,11 @@
-praw
+arrow
+beautifulsoup4
+coloredlogs
 gfycat
 imgurpython
+lxml
 mastodon.py
-coloredlogs
-requests
-beautifulsoup4
-arrow
-prawcore
 pillow
+praw
+prawcore
+requests
