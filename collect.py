@@ -296,10 +296,10 @@ class LinkedMediaHelper:
             imgur_client_secret = ''.join(input("[ .. ] Enter Imgur client secret: ").split())
             # Make sure authentication is working
             try:
-                imgur_client_id = ImgurClient(imgur_client_id, imgur_client_secret)
+                imgur_client = ImgurClient(imgur_client_id, imgur_client_secret)
 
                 # If this call doesn't work, it'll throw an ImgurClientError
-                imgur_client_id.get_album('dqOyj')
+                imgur_client.get_album('dqOyj')
                 # It worked, so save the keys to a file
                 imgur_config = configparser.ConfigParser()
                 imgur_config['Imgur'] = {'ClientID': imgur_client_id,

@@ -15,7 +15,7 @@ from publish import MastodonPublisher
 
 CODE_VERSION_MAJOR = 3  # Current major version of this code
 CODE_VERSION_MINOR = 0  # Current minor version of this code
-CODE_VERSION_PATCH = 3  # Current patch version of this code
+CODE_VERSION_PATCH = 4  # Current patch version of this code
 
 config = Configuration()
 
