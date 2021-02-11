@@ -123,7 +123,7 @@ class RedditHelper:
         self.logger.info('Getting posts from Subreddit: "%s"' % subreddit)
         subreddit_info = self.reddit_connection.subreddit(subreddit)
         try:
-            for submission in subreddit_info.hot(limit=limit):
+            for submission in subreddit_info.top("day",limit=limit):
 
                 if submission.over_18 and not self.reddit_config.nsfw_allowed:
                     # Skip over NSFW posts if they are disabled in the config file
